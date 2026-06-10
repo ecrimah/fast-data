@@ -14,6 +14,7 @@ const FOOTER_LINKS = {
   ],
   Company: [
     { href: '/contact', label: 'Contact us' },
+    { href: '/community', label: 'WhatsApp community' },
     { href: '/referrals', label: 'Referrals' },
     { href: '/guides', label: 'Guides' },
     { href: '/faq', label: 'FAQ' },
@@ -108,7 +109,17 @@ export function SiteFooter() {
             <ShieldCheck className="h-3 w-3" />
             Verified delivery
           </span>
-          <span>Powered by Tay</span>
+          <span>
+            Powered by{' '}
+            <a
+              href={SITE.poweredBy.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gold-glow transition-colors hover:text-gold-glow/80 hover:underline"
+            >
+              {SITE.poweredBy.name}
+            </a>
+          </span>
         </div>
 
         <div className="mt-4 flex flex-col items-center justify-between gap-2 border-t border-white/5 pt-4 text-center sm:flex-row sm:text-left">

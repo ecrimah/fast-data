@@ -32,6 +32,7 @@ export const Login: React.FC<LoginProps> = ({ setUser }) => {
     password: '',
     name: '',
     phone: '',
+    referralCode: '',
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -48,7 +49,7 @@ export const Login: React.FC<LoginProps> = ({ setUser }) => {
       if (isLogin) {
         user = await signIn(formData.email, formData.password);
       } else {
-        user = await signUp(formData.email, formData.name, formData.phone);
+        user = await signUp(formData.email, formData.name, formData.phone, formData.referralCode);
       }
       setUser(user);
       router.push(user.role === 'admin' ? '/admin' : '/');
@@ -164,6 +165,17 @@ export const Login: React.FC<LoginProps> = ({ setUser }) => {
                         required
                         placeholder="024 XXX XXXX"
                         className="flex h-11 w-full rounded-xl border border-border bg-white px-4 text-sm outline-none transition-colors focus:border-gold focus:ring-2 focus:ring-gold/20"
+                        onChange={handleChange}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-[#111]">
+                        Referral code <span className="text-muted">(optional)</span>
+                      </label>
+                      <input
+                        name="referralCode"
+                        placeholder="FRIEND123"
+                        className="flex h-11 w-full rounded-xl border border-border bg-white px-4 text-sm uppercase outline-none transition-colors focus:border-gold focus:ring-2 focus:ring-gold/20"
                         onChange={handleChange}
                       />
                     </div>

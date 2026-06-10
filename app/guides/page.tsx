@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowRight, BookOpen, Clock } from 'lucide-react';
+import { ArrowRight, Clock } from 'lucide-react';
 import { SITE } from '@/lib/brand';
 import { GUIDES } from '@/lib/guides';
 import { BreadcrumbJsonLd } from '@/components/seo/JsonLd';
+import { PageHero } from '@/components/layout/PageHero';
 
 export const metadata: Metadata = {
   title: 'Data Bundle Guides & Tips for Ghana',
@@ -28,27 +29,13 @@ export default function GuidesPage() {
         ]}
       />
 
-      <section
-        className="px-4 py-16 sm:px-6 sm:py-20 lg:px-8"
-        style={{
-          background: `
-            radial-gradient(ellipse 60% 80% at 0% 0%, rgba(212,175,55,0.12), transparent 60%),
-            linear-gradient(135deg, #081F3F 0%, #0A2E5D 100%)
-          `,
-        }}
-      >
-        <div className="mx-auto max-w-3xl text-center">
-          <span className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-gold-glow">
-            <BookOpen className="h-3 w-3" /> Guides &amp; tips
-          </span>
-          <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-            Data bundle guides for Ghana
-          </h1>
-          <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-slate-200">
-            Everything you need to buy smarter — from MoMo payments to saving money with non-expiry data.
-          </p>
-        </div>
-      </section>
+      <PageHero
+        image={SITE.heroGuides}
+        alt="Data bundle guides and tips for Ghana"
+        eyebrow="Guides & tips"
+        title="Data bundle guides for Ghana"
+        description="Everything you need to buy smarter — from MoMo payments to saving money with non-expiry data."
+      />
 
       <section className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid gap-5 sm:grid-cols-2">

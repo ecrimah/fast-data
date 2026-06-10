@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, Transaction } from '../types';
-import { getTransactions, topUpWallet } from '../services/supabaseDatabase';
+import { getTransactions } from '../services/supabaseDatabase';
+import { supabase } from '../services/supabaseClient';
 import { Plus, ArrowUpRight, ArrowDownLeft, RefreshCcw, CreditCard, Wifi } from 'lucide-react';
 
 interface WalletProps {
@@ -37,13 +38,32 @@ export const Wallet: React.FC<WalletProps> = ({ user, refreshUser }) => {
   const handleTopUp = async () => {
     if (!user || !amount) return;
     setLoading(true);
-    // Simulate payment gateway delay
-    await topUpWallet(user, parseFloat(amount));
-    refreshUser();
-    fetchTx();
-    setLoading(false);
-    setIsTopUpOpen(false);
-    setAmount('');
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Please sign in again');
+
+      const res = await fetch('/api/wallet/topup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ amount: parseFloat(amount) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Top-up failed');
+
+      refreshUser();
+      fetchTx();
+      setIsTopUpOpen(false);
+      setAmount('');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Top-up failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!user) return null;

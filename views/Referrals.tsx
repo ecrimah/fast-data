@@ -1,126 +1,197 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { User } from '../types';
-import { Copy, Gift, Users, Lock, Loader2 } from 'lucide-react';
+import { Copy, Gift, Users, Lock, Loader2, Share2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '../services/supabaseClient';
 import { getReferralsEnabled } from '../services/supabaseDatabase';
+import { SITE } from '@/lib/brand';
 
 interface ReferralProps {
   user: User | null;
 }
 
+interface ReferralStats {
+  enabled: boolean;
+  code: string;
+  invited: number;
+  earned: number;
+}
+
 export const Referrals: React.FC<ReferralProps> = ({ user }) => {
   const router = useRouter();
-  const [enabled, setEnabled] = useState(false);
+  const [stats, setStats] = useState<ReferralStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const checkStatus = async () => {
-      const isEnabled = await getReferralsEnabled();
-      setEnabled(isEnabled);
-      setLoading(false);
+    const load = async () => {
+      try {
+        const enabled = await getReferralsEnabled();
+        if (!enabled) {
+          setStats({ enabled: false, code: '', invited: 0, earned: 0 });
+          setLoading(false);
+          return;
+        }
+
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session?.access_token) {
+          setStats({ enabled: true, code: user?.referral_code ?? '', invited: 0, earned: 0 });
+          setLoading(false);
+          return;
+        }
+
+        const res = await fetch('/api/referrals/stats', {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        const data = await res.json();
+        setStats(data);
+      } catch {
+        setStats({ enabled: false, code: '', invited: 0, earned: 0 });
+      } finally {
+        setLoading(false);
+      }
     };
-    checkStatus();
-  }, []);
+    load();
+  }, [user]);
 
   if (loading) {
     return (
       <div className="flex justify-center py-20">
-        <Loader2 className="animate-spin text-brand-600" size={48} />
+        <Loader2 className="animate-spin text-royal" size={48} />
       </div>
     );
   }
 
-  // Locked State
-  if (!enabled) {
+  if (!stats?.enabled) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in-up">
-        <div className="bg-slate-100 dark:bg-slate-800 p-8 rounded-full mb-6 relative">
-          <Lock className="text-slate-400 dark:text-slate-500 w-16 h-16" />
-          <div className="absolute -bottom-2 -right-2 bg-brand-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="relative mb-6 rounded-full bg-slate-100 p-8">
+          <Lock className="h-16 w-16 text-slate-400" />
+          <span className="absolute -bottom-2 -right-2 rounded-full bg-royal px-3 py-1 text-xs font-bold text-white shadow-lg">
             Soon
-          </div>
+          </span>
         </div>
-        <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-3">Coming Soon</h2>
-        <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto">
-          Our referral program is currently under construction. Check back later to invite friends and earn rewards!
+        <h2 className="text-3xl font-extrabold text-royal">Coming Soon</h2>
+        <p className="mt-3 max-w-md text-sm text-muted">
+          Our referral program is being rolled out. Check back shortly to invite friends and earn wallet rewards.
         </p>
       </div>
     );
   }
 
-  // Not Logged In State (but enabled)
   if (!user) {
     return (
-      <div className="text-center py-20">
-        <h2 className="text-2xl font-bold mb-4 text-slate-900 dark:text-white">Join our Referral Program</h2>
-        <p className="text-slate-600 dark:text-slate-400 mb-6">Sign in to get your unique code and start earning.</p>
-        <button onClick={() => router.push('/login')} className="bg-brand-600 text-white px-6 py-2 rounded-lg hover:bg-brand-700 transition-colors">Login Now</button>
+      <div className="py-16 text-center">
+        <Gift className="mx-auto h-12 w-12 text-gold-dark" />
+        <h2 className="mt-4 text-2xl font-extrabold text-royal">Join our Referral Program</h2>
+        <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+          Sign in to get your unique code and earn GH₵ rewards when friends make their first purchase.
+        </p>
+        <Link href="/login" className="susu-btn-gold mt-6 inline-flex px-6 py-3 text-sm font-bold">
+          Sign in to start
+        </Link>
       </div>
     );
   }
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(user.referral_code);
-    alert('Code copied!');
+  const code = stats.code || user.referral_code;
+  const shareText = `Buy cheap non-expiry data bundles on ${SITE.name}! Use my code ${code} when you sign up: ${SITE.url}/login`;
+
+  const copyCode = async () => {
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const shareCode = async () => {
+    if (navigator.share) {
+      await navigator.share({ title: SITE.name, text: shareText, url: SITE.url });
+    } else {
+      await navigator.clipboard.writeText(shareText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="bg-indigo-900 dark:bg-indigo-950 rounded-3xl p-8 md:p-12 text-white text-center mb-8 relative overflow-hidden transition-colors">
-        <div className="relative z-10 max-w-2xl mx-auto">
-          <h1 className="text-3xl md:text-4xl font-bold mb-4">Invite Friends, Earn Data</h1>
-          <p className="text-indigo-200 text-lg mb-8">Share your code. When your friend makes their first purchase, you both get 1GB Free Data or equivalent wallet credit.</p>
-          
-          <div className="bg-white/10 backdrop-blur-md p-2 rounded-xl inline-flex items-center space-x-4 border border-white/20">
-            <span className="font-mono text-xl md:text-2xl font-bold tracking-wider px-4">{user.referral_code}</span>
-            <button 
-              onClick={copyToClipboard}
-              className="bg-white text-indigo-900 p-2 rounded-lg hover:bg-indigo-50 transition-colors"
+    <div className="mx-auto max-w-4xl space-y-8">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#081F3F] to-[#0A2E5D] p-8 text-center text-white md:p-12">
+        <div className="relative z-10 mx-auto max-w-2xl">
+          <span className="eyebrow text-gold-glow">Refer &amp; earn</span>
+          <h1 className="mt-2 text-3xl font-extrabold md:text-4xl">Invite friends, earn wallet credit</h1>
+          <p className="mt-3 text-sm text-slate-300">
+            Share your code. When a friend signs up and completes their first paid order, you earn wallet credit instantly.
+          </p>
+
+          <div className="mt-8 inline-flex items-center gap-3 rounded-2xl border border-white/20 bg-white/10 p-2 backdrop-blur">
+            <span className="px-4 font-mono text-xl font-bold tracking-wider text-gold-glow">{code}</span>
+            <button
+              type="button"
+              onClick={copyCode}
+              className="rounded-xl bg-white p-2.5 text-royal transition hover:bg-gold/20"
+              aria-label="Copy referral code"
             >
               <Copy size={20} />
             </button>
+            <button
+              type="button"
+              onClick={shareCode}
+              className="rounded-xl border border-white/20 bg-white/10 p-2.5 text-white transition hover:bg-white/20"
+              aria-label="Share referral code"
+            >
+              <Share2 size={20} />
+            </button>
           </div>
+          {copied && <p className="mt-2 text-xs text-emerald-300">Copied to clipboard!</p>}
         </div>
-        <Gift className="absolute top-10 left-10 text-white/5 w-48 h-48 rotate-12" />
-        <Users className="absolute bottom-10 right-10 text-white/5 w-40 h-40 -rotate-12" />
+        <Gift className="absolute -left-4 top-8 h-40 w-40 rotate-12 text-white/5" />
+        <Users className="absolute -bottom-4 -right-4 h-36 w-36 -rotate-12 text-white/5" />
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 transition-colors">
-          <h3 className="font-bold text-slate-900 dark:text-white mb-2">How it works</h3>
-          <ul className="space-y-4 text-slate-600 dark:text-slate-300">
+      <div className="grid gap-6 md:grid-cols-2">
+        <div className="card-elevated p-6">
+          <h3 className="font-bold text-royal">How it works</h3>
+          <ul className="mt-4 space-y-4 text-sm text-muted">
             <li className="flex gap-3">
-              <span className="bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 w-6 h-6 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">1</span>
-              <span>Copy your unique referral code above.</span>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold/15 text-xs font-bold text-gold-dark">1</span>
+              Copy your referral code above.
             </li>
             <li className="flex gap-3">
-              <span className="bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 w-6 h-6 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">2</span>
-              <span>Send it to friends. They enter it during signup.</span>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold/15 text-xs font-bold text-gold-dark">2</span>
+              Friends enter it when they create an account.
             </li>
             <li className="flex gap-3">
-              <span className="bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 w-6 h-6 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">3</span>
-              <span>Receive rewards instantly after their first order.</span>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold/15 text-xs font-bold text-gold-dark">3</span>
+              You earn wallet credit after their first paid order.
             </li>
           </ul>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 transition-colors">
-          <h3 className="font-bold text-slate-900 dark:text-white mb-4">Your Stats</h3>
-          <div className="grid grid-cols-2 gap-4 text-center">
-            <div className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg transition-colors">
-              <div className="text-2xl font-bold text-brand-600 dark:text-brand-400">0</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 uppercase font-medium">Friends Invited</div>
+        <div className="card-elevated p-6">
+          <h3 className="font-bold text-royal">Your stats</h3>
+          <div className="mt-4 grid grid-cols-2 gap-4 text-center">
+            <div className="rounded-xl bg-slate-50 p-4">
+              <div className="text-2xl font-extrabold text-royal">{stats.invited}</div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-muted">Friends invited</div>
             </div>
-            <div className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg transition-colors">
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400">0 GB</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 uppercase font-medium">Data Earned</div>
+            <div className="rounded-xl bg-slate-50 p-4">
+              <div className="text-2xl font-extrabold text-gold-dark">GH₵ {stats.earned.toFixed(2)}</div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-muted">Rewards earned</div>
             </div>
           </div>
-          <div className="mt-6 text-center text-sm text-slate-400">
-            Stats update in real-time.
-          </div>
+          <button
+            type="button"
+            onClick={() => router.push('/wallet')}
+            className="mt-4 w-full rounded-xl border border-border py-2.5 text-sm font-bold text-royal hover:bg-slate-50"
+          >
+            View wallet balance
+          </button>
         </div>
       </div>
     </div>

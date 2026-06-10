@@ -54,8 +54,12 @@ export default function AdminSettingsPage() {
 
       <GlassPanel>
         <h3 className="font-bold text-white">SMS templates</h3>
-        <textarea className="fds-input mt-2 min-h-[80px]" value={config.smsTemplates.paymentReceived} onChange={(e) => setConfig({ ...config, smsTemplates: { ...config.smsTemplates, paymentReceived: e.target.value } })} />
-        <textarea className="fds-input mt-2 min-h-[80px]" value={config.smsTemplates.orderFulfilled} onChange={(e) => setConfig({ ...config, smsTemplates: { ...config.smsTemplates, orderFulfilled: e.target.value } })} />
+        <label className="mt-2 block text-xs text-white/50">Payment received (customer)</label>
+        <textarea className="fds-input mt-1 min-h-[80px]" value={config.smsTemplates.paymentReceived} onChange={(e) => setConfig({ ...config, smsTemplates: { ...config.smsTemplates, paymentReceived: e.target.value } })} />
+        <label className="mt-2 block text-xs text-white/50">Order fulfilled (customer)</label>
+        <textarea className="fds-input mt-1 min-h-[80px]" value={config.smsTemplates.orderFulfilled} onChange={(e) => setConfig({ ...config, smsTemplates: { ...config.smsTemplates, orderFulfilled: e.target.value } })} />
+        <label className="mt-2 block text-xs text-white/50">Wallet top-up (admin alert)</label>
+        <textarea className="fds-input mt-1 min-h-[80px]" value={config.smsTemplates.walletTopUpAdmin} onChange={(e) => setConfig({ ...config, smsTemplates: { ...config.smsTemplates, walletTopUpAdmin: e.target.value } })} />
       </GlassPanel>
 
       <GlassPanel>

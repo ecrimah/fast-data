@@ -22,6 +22,7 @@ export interface MoolreSmsConfig {
 export interface SmsTemplatesConfig {
   paymentReceived: string;
   orderFulfilled: string;
+  walletTopUpAdmin: string;
 }
 
 export interface ShopBanner {
@@ -66,6 +67,8 @@ export const DEFAULT_PLATFORM_CONFIG: PlatformConfig = {
     paymentReceived:
       'FDS: Payment of GH₵{amount} received for {ref}. Your data is being processed.',
     orderFulfilled: 'FDS: {bundle} delivered to {phone}. Ref: {ref}. Thank you!',
+    walletTopUpAdmin:
+      'FDS ADMIN: Wallet TOP-UP of GH₵{amount} by {name} ({phone}). Ref: {ref}. Not a data order.',
   },
   shopBanners: DEFAULT_SHOP_BANNERS,
 };
@@ -113,6 +116,7 @@ export function normalizePlatformConfig(input: unknown): PlatformConfig {
     smsTemplates: {
       paymentReceived: typeof raw.smsTemplates?.paymentReceived === 'string' ? raw.smsTemplates.paymentReceived.slice(0, 320) : base.smsTemplates.paymentReceived,
       orderFulfilled: typeof raw.smsTemplates?.orderFulfilled === 'string' ? raw.smsTemplates.orderFulfilled.slice(0, 320) : base.smsTemplates.orderFulfilled,
+      walletTopUpAdmin: typeof raw.smsTemplates?.walletTopUpAdmin === 'string' ? raw.smsTemplates.walletTopUpAdmin.slice(0, 320) : base.smsTemplates.walletTopUpAdmin,
     },
     shopBanners: normalizeShopBanners(raw.shopBanners),
   };

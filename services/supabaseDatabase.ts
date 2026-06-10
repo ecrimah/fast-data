@@ -67,7 +67,12 @@ export const signIn = async (email: string, password: string): Promise<User> => 
   };
 };
 
-export const signUp = async (email: string, name: string, phone: string): Promise<User> => {
+export const signUp = async (
+  email: string,
+  name: string,
+  phone: string,
+  referralCode?: string
+): Promise<User> => {
   if (!isSupabaseConfigured) throw notConfigured();
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -77,8 +82,19 @@ export const signUp = async (email: string, name: string, phone: string): Promis
   if (error) throw error;
   if (!data.user) throw new Error('Signup failed');
 
-  // Create profile
-  const referralCode = Math.random().toString(36).substr(2, 6).toUpperCase();
+  let referredBy: string | null = null;
+  if (referralCode?.trim()) {
+    const { data: referrer } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('referral_code', referralCode.trim().toUpperCase())
+      .maybeSingle();
+    if (referrer?.id && referrer.id !== data.user.id) {
+      referredBy = referrer.id;
+    }
+  }
+
+  const newReferralCode = Math.random().toString(36).substr(2, 6).toUpperCase();
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .insert({
@@ -88,7 +104,8 @@ export const signUp = async (email: string, name: string, phone: string): Promis
       phone,
       role: UserRole.USER,
       wallet_balance: 0,
-      referral_code: referralCode
+      referral_code: newReferralCode,
+      referred_by: referredBy,
     })
     .select()
     .single();

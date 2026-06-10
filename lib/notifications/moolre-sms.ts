@@ -2,7 +2,7 @@ import 'server-only';
 import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admin';
 import { getPlatformConfig } from '@/lib/data/platform-config';
 
-export type SmsTemplate = 'payment_received' | 'order_fulfilled' | 'test';
+export type SmsTemplate = 'payment_received' | 'order_fulfilled' | 'wallet_topup_admin' | 'test';
 
 function formatPhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
@@ -68,13 +68,13 @@ export async function sendMoolreSms(args: {
     return { ok: false, error: 'SMS disabled' };
   }
 
-  if (!process.env.MOOLRE_API_VASKEY || !process.env.MOOLRE_API_USER) {
+  if ((!process.env.MOOLRE_API_VASKEY && !process.env.MOOLRE_SMS_API_KEY) || !process.env.MOOLRE_API_USER) {
     await logSms({
       template: args.template,
       recipient,
       message: args.message,
       status: 'skipped',
-      error: 'MOOLRE_API_VASKEY or MOOLRE_API_USER not set',
+      error: 'MOOLRE SMS API key or MOOLRE_API_USER not set',
       triggeredBy: args.triggeredBy,
       context: args.context,
     });
@@ -87,7 +87,7 @@ export async function sendMoolreSms(args: {
       headers: {
         'Content-Type': 'application/json',
         'X-API-USER': process.env.MOOLRE_API_USER,
-        'X-API-VASKEY': process.env.MOOLRE_API_VASKEY,
+        'X-API-VASKEY': process.env.MOOLRE_API_VASKEY || process.env.MOOLRE_SMS_API_KEY || '',
       },
       body: JSON.stringify({
         type: 1,
@@ -166,6 +166,34 @@ export async function smsOrderFulfilled(args: {
     ref: args.ref,
     triggeredBy: args.triggeredBy,
     context: { bundle: args.bundle, ref: args.ref },
+  });
+}
+
+export async function smsWalletTopUpAdmin(args: {
+  amount: number;
+  name: string;
+  phone: string;
+  ref: string;
+  triggeredBy?: string;
+}) {
+  const config = await getPlatformConfig();
+  const adminPhone = config.contact.supportWhatsApp || process.env.ADMIN_NOTIFY_PHONE || '';
+  if (!adminPhone) return { ok: false, error: 'Admin notify phone not configured' };
+
+  const message = renderTemplate(config.smsTemplates.walletTopUpAdmin, {
+    amount: args.amount.toFixed(2),
+    name: args.name,
+    phone: args.phone,
+    ref: args.ref,
+  });
+
+  return sendMoolreSms({
+    phone: adminPhone,
+    message,
+    template: 'wallet_topup_admin',
+    ref: args.ref,
+    triggeredBy: args.triggeredBy,
+    context: { amount: args.amount, name: args.name, phone: args.phone, type: 'wallet_topup' },
   });
 }
 

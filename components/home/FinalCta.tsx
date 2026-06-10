@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { ArrowRight, MessageCircle } from 'lucide-react';
+import { SITE } from '@/lib/brand';
 
 export function FinalCta() {
   const openTayChat = () => {
@@ -46,7 +47,18 @@ export function FinalCta() {
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
-          <p className="mt-4 text-[11px] text-slate-400">Powered by Tay · Available 24/7 on this site</p>
+          <p className="mt-4 text-[11px] text-slate-400">
+            Powered by{' '}
+            <a
+              href={SITE.poweredBy.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gold-glow hover:underline"
+            >
+              {SITE.poweredBy.name}
+            </a>
+            {' '}· Available 24/7 on this site
+          </p>
         </div>
       </div>
     </section>

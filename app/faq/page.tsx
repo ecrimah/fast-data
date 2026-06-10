@@ -4,6 +4,7 @@ import { ArrowRight } from 'lucide-react';
 import { SITE } from '@/lib/brand';
 import { FAQS } from '@/lib/faqs';
 import { FaqJsonLd, BreadcrumbJsonLd } from '@/components/seo/JsonLd';
+import { PageHero } from '@/components/layout/PageHero';
 
 export const metadata: Metadata = {
   title: 'Data Bundle FAQ — Delivery, Payment & Networks',
@@ -30,27 +31,13 @@ export default function FaqPage() {
         ]}
       />
 
-      <section
-        className="px-4 py-16 sm:px-6 sm:py-20 lg:px-8"
-        style={{
-          background: `
-            radial-gradient(ellipse 60% 80% at 0% 0%, rgba(212,175,55,0.12), transparent 60%),
-            linear-gradient(135deg, #081F3F 0%, #0A2E5D 100%)
-          `,
-        }}
-      >
-        <div className="mx-auto max-w-3xl text-center">
-          <span className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-gold-glow">
-            Help center
-          </span>
-          <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-            Frequently asked questions
-          </h1>
-          <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-slate-200">
-            Everything you need to know about buying data bundles in Ghana with {SITE.name}.
-          </p>
-        </div>
-      </section>
+      <PageHero
+        image={SITE.heroFaq}
+        alt="Fast Data Services help center and FAQ"
+        eyebrow="Help center"
+        title="Frequently asked questions"
+        description={`Everything you need to know about buying data bundles in Ghana with ${SITE.name}.`}
+      />
 
       <section className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="space-y-3">

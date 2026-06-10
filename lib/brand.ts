@@ -59,8 +59,16 @@ export const SITE = {
     tiktok: '',
   },
   twitterHandle: '@fastdatagh',
+  poweredBy: {
+    name: 'Tay',
+    url: 'https://www.lovelacetaytech.com',
+  },
+  whatsappCommunityUrl: 'https://chat.whatsapp.com/',
   heroAuth: '/hero-auth.png',
   heroContact: '/hero-contact.png',
+  heroFaq: '/hero-faq.png',
+  heroGuides: '/hero-guides.png',
+  heroReferrals: '/hero-referrals.png',
   heroHome: '/hero-slide-1.png',
   heroSlides: [
     {

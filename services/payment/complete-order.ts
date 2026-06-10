@@ -2,6 +2,7 @@ import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admi
 import { PaymentStatus } from '@/types';
 import { dispatchOrderToSupplier } from '@/lib/suppliers/dispatch-order';
 import { smsPaymentReceived } from '@/lib/notifications/moolre-sms';
+import { processReferralReward } from '@/lib/referrals/process-reward';
 
 export async function completePaidOrder(orderId: string): Promise<void> {
   if (!hasSupabaseAdminConfig()) return;
@@ -35,6 +36,8 @@ export async function completePaidOrder(orderId: string): Promise<void> {
     amount: Number(order.amount),
     ref: order.payment_ref,
   }).catch(console.error);
+
+  await processReferralReward(orderId);
 
   await dispatchOrderToSupplier(orderId);
 }
