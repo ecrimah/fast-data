@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { UserProvider, useUser } from '@/contexts/UserContext';
 import { Layout } from '@/components/Layout';
 import { SupportChat } from '@/components/SupportChat';
+import { AdminChat } from '@/components/admin/AdminChat';
 
 function AppShellInner({ children }: { children: ReactNode }) {
   const { user, loading, handleLogout } = useUser();
@@ -20,7 +21,16 @@ function AppShellInner({ children }: { children: ReactNode }) {
     );
   }
 
-  if (isAuthPage || isAdminPage) {
+  if (isAdminPage) {
+    return (
+      <>
+        {children}
+        <AdminChat />
+      </>
+    );
+  }
+
+  if (isAuthPage) {
     return (
       <>
         {children}
