@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { assertAdminApi } from '@/lib/auth/admin-api';
 import {
   adjustCustomerWallet,
+  cancelOrder,
+  cancelOrders,
   fulfillOrder,
   getAnalyticsSummary,
   getOpsSummary,
@@ -82,6 +84,45 @@ const ADMIN_TOOLS = [
           ref_or_id: { type: 'string', description: 'Order UUID or payment reference' },
         },
         required: ['ref_or_id'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'cancel_order',
+      description: 'Cancel a single order by order id or payment reference. Use for unpaid orders or paid orders not yet delivered.',
+      parameters: {
+        type: 'object',
+        properties: {
+          ref_or_id: { type: 'string', description: 'Order UUID or payment reference' },
+          note: { type: 'string', description: 'Optional cancellation reason' },
+          refund_wallet: {
+            type: 'boolean',
+            description: 'If true and order was paid via wallet, credit the customer wallet back',
+          },
+        },
+        required: ['ref_or_id'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'cancel_orders',
+      description: 'Cancel multiple orders at once using their order ids or payment refs from the conversation.',
+      parameters: {
+        type: 'object',
+        properties: {
+          ref_or_ids: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'List of order UUIDs or payment references',
+          },
+          note: { type: 'string' },
+          refund_wallet: { type: 'boolean' },
+        },
+        required: ['ref_or_ids'],
       },
     },
   },
@@ -239,6 +280,24 @@ async function executeAdminTool(
       };
     case 'fulfill_order':
       return { result: await fulfillOrder(String(args.ref_or_id), { adminUserId: ctx.adminUserId }) };
+    case 'cancel_order':
+      return {
+        result: await cancelOrder(
+          String(args.ref_or_id),
+          args.note as string | undefined,
+          args.refund_wallet as boolean | undefined
+        ),
+      };
+    case 'cancel_orders': {
+      const ids = Array.isArray(args.ref_or_ids) ? args.ref_or_ids.map(String) : [];
+      return {
+        result: await cancelOrders(
+          ids,
+          args.note as string | undefined,
+          args.refund_wallet as boolean | undefined
+        ),
+      };
+    }
     case 'retry_supplier_order':
       return { result: await retrySupplierOrder(String(args.order_id)) };
     case 'resolve_manual_order':
@@ -331,7 +390,7 @@ You help authenticated admins run the platform. You are NOT the customer-facing 
 
 Capabilities (use tools — never guess):
 - Ops queue: pending delivery, manual fulfilment, supplier failures, unmatched MoMo, disputes
-- Orders: search, list, mark fulfilled, retry supplier, resolve manual orders
+- Orders: search, list, mark fulfilled, cancel (cancel_order / cancel_orders), retry supplier, resolve manual orders
 - Payments: list/match unmatched MoMo events to orders
 - Customers: search profiles, credit/debit wallets (confirm amounts before debits)
 - Catalog: list/update packages, change global price per GB
@@ -339,7 +398,10 @@ Capabilities (use tools — never guess):
 
 Rules:
 - Be concise and action-oriented. Use GH₵ for money.
-- Before fulfill_order, retry_supplier_order, match_payment, or wallet adjustments: confirm the target id/ref unless the admin was explicit.
+- Only offer actions you can perform with the tools above. Use cancel_orders when the admin says "cancel them" and you already listed specific order ids/refs.
+- Before fulfill_order, cancel_order(s), retry_supplier_order, match_payment, or wallet adjustments: confirm the target id/ref unless the admin was explicit.
+- For MoMo-paid orders, cancel stops fulfilment but does not auto-refund MoMo — say that clearly.
+- For wallet-paid orders, set refund_wallet=true when cancelling if the admin wants money returned.
 - For destructive actions (debit wallet, mark failed): double-check identifiers.
 - Never help with customer purchases here — direct those to the storefront Tay.
 - Summarize tool results clearly; include payment refs and phones when listing orders.`;
@@ -378,7 +440,20 @@ Rules:
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const groqError =
+          typeof data?.error?.message === 'string'
+            ? data.error.message
+            : 'AI service temporarily unavailable.';
+        console.error('[admin/chat] groq', groqError);
+        return NextResponse.json({
+          response: `Tay Ops could not reach the AI service: ${groqError}`,
+          quickReplies,
+        });
+      }
+
       const choice = data.choices?.[0]?.message;
 
       if (!choice) {
@@ -396,7 +471,17 @@ Rules:
         });
 
         for (const tc of choice.tool_calls) {
-          const fn = tc.function;
+          const fn = tc?.function;
+          if (!fn?.name) {
+            groqMessages.push({
+              role: 'tool',
+              tool_call_id: tc?.id ?? `missing-${step}`,
+              name: 'unknown',
+              content: JSON.stringify({ ok: false, error: 'Malformed tool call from AI' }),
+            });
+            continue;
+          }
+
           let args: Record<string, unknown> = {};
           try {
             args = JSON.parse(fn.arguments || '{}');
@@ -404,7 +489,16 @@ Rules:
             args = {};
           }
 
-          const { result } = await executeAdminTool(fn.name, args, ctx);
+          let result: unknown;
+          try {
+            ({ result } = await executeAdminTool(fn.name, args, ctx));
+          } catch (toolError) {
+            console.error('[admin/chat] tool', fn.name, toolError);
+            result = {
+              ok: false,
+              error: toolError instanceof Error ? toolError.message : 'Tool execution failed',
+            };
+          }
 
           groqMessages.push({
             role: 'tool',
@@ -434,6 +528,7 @@ Rules:
     });
   } catch (error) {
     console.error('[admin/chat]', error);
-    return NextResponse.json({ error: 'Admin chat failed' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unexpected error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

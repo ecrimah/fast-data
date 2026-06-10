@@ -6,7 +6,7 @@ import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admi
 import { dispatchOrderToSupplier } from '@/lib/suppliers/dispatch-order';
 import { completePaidOrder } from '@/services/payment/complete-order';
 import { smsOrderFulfilled } from '@/lib/notifications/moolre-sms';
-import { DeliveryStatus, type Order } from '@/types';
+import { DeliveryStatus, PaymentStatus, type Order } from '@/types';
 
 export type AdminChatCtx = { adminUserId: string };
 
@@ -165,6 +165,89 @@ export async function fulfillOrder(refOrId: string, ctx: AdminChatCtx) {
   return { ok: true as const, order: summarizeOrder({ ...order, delivery_status: DeliveryStatus.DELIVERED }) };
 }
 
+export async function cancelOrder(
+  refOrId: string,
+  note: string | undefined,
+  refundWallet: boolean | undefined
+) {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+
+  const order = await findOrderByRefOrId(refOrId);
+  if (!order) return { ok: false as const, error: 'Order not found', ref_or_id: refOrId };
+
+  if (order.delivery_status === DeliveryStatus.DELIVERED) {
+    return { ok: false as const, error: 'Order already delivered — cannot cancel', ref_or_id: refOrId };
+  }
+
+  const service = createServiceClient();
+  const cancelNote = note?.trim() || 'Cancelled by admin';
+
+  if (order.payment_status === PaymentStatus.PENDING) {
+    const { error } = await service
+      .from('orders')
+      .update({
+        payment_status: PaymentStatus.FAILED,
+        supplier_status: 'cancelled',
+        supplier_error: cancelNote,
+      })
+      .eq('id', order.id);
+    if (error) return { ok: false as const, error: error.message, ref_or_id: refOrId };
+    return {
+      ok: true as const,
+      cancelled: summarizeOrder({
+        ...order,
+        payment_status: PaymentStatus.FAILED,
+        supplier_status: 'cancelled',
+      }),
+      refunded: false,
+    };
+  }
+
+  const { error } = await service
+    .from('orders')
+    .update({
+      supplier_status: 'cancelled',
+      supplier_error: cancelNote,
+    })
+    .eq('id', order.id);
+  if (error) return { ok: false as const, error: error.message, ref_or_id: refOrId };
+
+  let refunded = false;
+  if (refundWallet && order.payment_method === 'wallet' && order.user_id) {
+    const walletResult = await adjustCustomerWallet(order.user_id, Number(order.amount));
+    refunded = walletResult.ok;
+  }
+
+  return {
+    ok: true as const,
+    cancelled: summarizeOrder({ ...order, supplier_status: 'cancelled' }),
+    refunded,
+  };
+}
+
+export async function cancelOrders(
+  refOrIds: string[],
+  note: string | undefined,
+  refundWallet: boolean | undefined
+) {
+  if (!refOrIds.length) return { ok: false as const, error: 'Provide at least one order id or payment ref' };
+
+  const results = [];
+  for (const refOrId of refOrIds) {
+    results.push(await cancelOrder(refOrId, note, refundWallet));
+  }
+
+  const cancelled = results.filter((r) => r.ok).length;
+  const failed = results.filter((r) => !r.ok);
+
+  return {
+    ok: cancelled > 0,
+    cancelled,
+    failed: failed.length,
+    results,
+  };
+}
+
 export async function retrySupplierOrder(orderId: string) {
   if (!hasSupabaseAdminConfig()) return notConfigured();
   if (!orderId?.trim()) return { ok: false as const, error: 'orderId required' };
@@ -242,13 +325,14 @@ export async function listUnmatchedPayments() {
   if (!hasSupabaseAdminConfig()) return notConfigured();
 
   const service = createServiceClient();
-  const { data } = await service
+  const { data, error } = await service
     .from('payment_events')
-    .select('id, amount, payer_phone, external_ref, created_at, matched_order_id')
+    .select('id, amount, sender_phone, reference_hint, transaction_id, created_at, matched_order_id')
     .is('matched_order_id', null)
     .order('created_at', { ascending: false })
     .limit(20);
 
+  if (error) return { ok: false as const, error: error.message };
   return { ok: true as const, events: data ?? [] };
 }
 
