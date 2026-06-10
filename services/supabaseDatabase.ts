@@ -157,6 +157,22 @@ export const setReferralsEnabled = async (enabled: boolean): Promise<void> => {
 
 // --- Data Services ---
 
+async function resolveOrderAmount(network: Network, size: number): Promise<number> {
+  const pkgNetwork = network === Network.MTN ? 'MTN' : network === Network.VODAFONE ? 'Telecel' : 'AT';
+  const { data: pkg } = await supabase
+    .from('data_packages')
+    .select('price')
+    .eq('network', pkgNetwork)
+    .eq('size_gb', size)
+    .eq('active', true)
+    .maybeSingle();
+
+  if (pkg?.price != null) return Number(pkg.price);
+
+  const currentPrice = await getPricePerGb();
+  return +(size * currentPrice).toFixed(2);
+}
+
 export const getUserWallet = async (userId: string): Promise<number> => {
   if (!isSupabaseConfigured) return 0;
   const { data, error } = await supabase
@@ -178,8 +194,7 @@ export const createOrder = async (
   paymentStatus: PaymentStatus = PaymentStatus.PAID
 ): Promise<Order> => {
   if (!isSupabaseConfigured) throw notConfigured();
-  const currentPrice = await getPricePerGb();
-  const amount = size * currentPrice;
+  const amount = await resolveOrderAmount(network, size);
 
   // If wallet payment, check balance and complete immediately
   if (paymentMethod === 'wallet') {

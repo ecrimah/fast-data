@@ -1,7 +1,5 @@
 import 'server-only';
 
-import 'server-only';
-
 import { BUNDLE_SIZES } from '@/constants';
 import { DeliveryStatus, Network, PaymentStatus } from '@/types';
 import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admin';
@@ -9,6 +7,8 @@ import { initMoolrePayment } from '@/lib/moolre-payment';
 import { dispatchOrderToSupplier } from '@/lib/suppliers/dispatch-order';
 import { SITE_KNOWLEDGE } from '@/lib/site-knowledge';
 import { SITE } from '@/lib/brand';
+import { getActivePackages, resolvePackagePrice } from '@/lib/packages/pricing';
+import { PACKAGE_NETWORKS, toPackageNetwork } from '@/lib/packages/types';
 
 export type ChatOrder = {
   id: string;
@@ -53,9 +53,23 @@ async function getPricePerGb(): Promise<number> {
   return data?.price_per_gb ?? 6;
 }
 
-export async function listBundles(): Promise<{ size_gb: number; price_ghs: number }[]> {
+export async function listBundles(): Promise<{ network: string; size_gb: number; price_ghs: number; popular?: boolean }[]> {
+  if (hasSupabaseAdminConfig()) {
+    const all = await Promise.all(PACKAGE_NETWORKS.map((n) => getActivePackages(n)));
+    const flat = all.flat();
+    if (flat.length > 0) {
+      return flat.map((p) => ({
+        network: p.network,
+        size_gb: p.size_gb,
+        price_ghs: Number(p.price),
+        popular: p.popular,
+      }));
+    }
+  }
+
   const pricePerGb = await getPricePerGb();
   return BUNDLE_SIZES.map((size) => ({
+    network: 'MTN',
     size_gb: size,
     price_ghs: +(size * pricePerGb).toFixed(2),
   }));
@@ -124,8 +138,11 @@ export async function createChatOrder(args: {
     return { ok: false, error: 'Invalid network. Choose MTN, Telecel, or AT.' };
   }
 
-  if (!BUNDLE_SIZES.includes(args.sizeGb)) {
-    return { ok: false, error: `Invalid bundle size. Available: ${BUNDLE_SIZES.join(', ')} GB.` };
+  const pkgNetwork = toPackageNetwork(network);
+  const { price: amount } = await resolvePackagePrice(pkgNetwork, args.sizeGb);
+
+  if (!amount || amount <= 0) {
+    return { ok: false, error: `Invalid bundle size. Available sizes are configured in the shop.` };
   }
 
   const phone = normalizePhone(args.phone);
@@ -137,8 +154,6 @@ export async function createChatOrder(args: {
     return { ok: false, error: 'Sign in to pay with wallet, or choose MoMo payment.' };
   }
 
-  const pricePerGb = await getPricePerGb();
-  const amount = +(args.sizeGb * pricePerGb).toFixed(2);
   const supabase = createServiceClient();
 
   const guestUserId = process.env.CHAT_GUEST_USER_ID?.trim();

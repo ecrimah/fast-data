@@ -269,12 +269,6 @@ export const Login: React.FC<LoginProps> = ({ setUser }) => {
             </div>
           </div>
 
-          {isLogin && (
-            <p className="mt-4 rounded-xl border border-border bg-white px-4 py-3 text-center text-[11px] text-muted">
-              Demo admin: <span className="font-mono">{SITE.adminDemoEmail} / admin123</span>
-            </p>
-          )}
-
           <p className="mt-4 text-center text-xs text-muted">
             <Link href="/" className="font-semibold text-[#111] hover:text-gold-dark">
               ← Back to home

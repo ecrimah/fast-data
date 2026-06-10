@@ -20,6 +20,8 @@ import {
   BarChart3,
   Wallet,
   ListChecks,
+  Package,
+  Users,
 } from 'lucide-react';
 import { useEffect, useState, ReactNode } from 'react';
 import { FdsLogo } from '@/components/brand/FdsLogo';
@@ -30,6 +32,8 @@ const NAV = [
   { href: '/admin', label: 'Command', icon: LayoutGrid, exact: true },
   { href: '/admin/operations', label: 'Queue', icon: ListChecks },
   { href: '/admin/orders', label: 'Orders', icon: FileText },
+  { href: '/admin/packages', label: 'Packages', icon: Package },
+  { href: '/admin/customers', label: 'Customers', icon: Users },
   { href: '/admin/suppliers', label: 'Suppliers', icon: Cable },
   { href: '/admin/momo', label: 'MoMo Match', icon: Smartphone },
   { href: '/admin/sms', label: 'SMS Hub', icon: MessageSquare },

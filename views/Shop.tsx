@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Network, Bundle } from '../types';
-import { BUNDLE_SIZES, AVAILABLE_NETWORKS, PRICE_PER_GB } from '../constants';
+import { AVAILABLE_NETWORKS, PRICE_PER_GB, BUNDLE_SIZES } from '../constants';
 import { getPricePerGb } from '../services/supabaseDatabase';
 import { setCheckoutState } from '@/lib/navigationState';
 import { DEFAULT_SHOP_BANNERS, type ShopBanner } from '@/lib/platform/config-types';
-import { ArrowRight, Loader2 } from 'lucide-react';
+import type { DataPackage, PackageNetwork } from '@/lib/packages/types';
+import { ArrowRight, Loader2, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const networkSlug = (n: Network) => {
@@ -16,27 +17,57 @@ const networkSlug = (n: Network) => {
   return 'at';
 };
 
+function toPackageNetwork(n: Network): PackageNetwork {
+  if (n === Network.MTN) return 'MTN';
+  if (n === Network.VODAFONE) return 'Telecel';
+  return 'AT';
+}
+
 export const Shop: React.FC = () => {
   const router = useRouter();
   const [selectedNetwork, setSelectedNetwork] = useState<Network>(Network.MTN);
   const [currentPricePerGb, setCurrentPricePerGb] = useState<number>(PRICE_PER_GB);
+  const [packagesByNetwork, setPackagesByNetwork] = useState<Record<PackageNetwork, DataPackage[]>>({
+    MTN: [],
+    Telecel: [],
+    AT: [],
+  });
   const [loadingPrice, setLoadingPrice] = useState(true);
   const [promoBanners, setPromoBanners] = useState<ShopBanner[]>(DEFAULT_SHOP_BANNERS);
 
   useEffect(() => {
-    getPricePerGb().then((price) => {
-      setCurrentPricePerGb(price);
-      setLoadingPrice(false);
-    });
-    fetch('/api/storefront/banners')
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.banners?.length) setPromoBanners(d.banners);
+    Promise.all([
+      getPricePerGb(),
+      fetch('/api/storefront/packages').then((r) => r.json()),
+      fetch('/api/storefront/banners').then((r) => r.json()),
+    ])
+      .then(([price, pkgData, bannerData]) => {
+        setCurrentPricePerGb(price);
+        if (pkgData.packages) setPackagesByNetwork(pkgData.packages);
+        if (bannerData.banners?.length) setPromoBanners(bannerData.banners);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoadingPrice(false));
   }, []);
 
-  const handleBuyClick = (bundle: Bundle) => {
+  const activePackages = useMemo(() => {
+    const net = toPackageNetwork(selectedNetwork);
+    const fromDb = packagesByNetwork[net] ?? [];
+    if (fromDb.length > 0) return fromDb;
+    return BUNDLE_SIZES.map((size, i) => ({
+      id: `fallback-${net}-${size}`,
+      network: net,
+      size_gb: size,
+      price: size * currentPricePerGb,
+      label: null,
+      active: true,
+      popular: size === 5 || size === 10,
+      sort_order: i + 1,
+    })) as DataPackage[];
+  }, [packagesByNetwork, selectedNetwork, currentPricePerGb]);
+
+  const handleBuyClick = (pkg: DataPackage) => {
+    const bundle: Bundle = { size: pkg.size_gb, price: Number(pkg.price) };
     setCheckoutState({ bundle, network: selectedNetwork });
     router.push('/checkout');
   };
@@ -50,7 +81,7 @@ export const Shop: React.FC = () => {
           <span className="eyebrow text-gold-dark">Shop bundles</span>
           <h2 className="display-2 mt-2 text-royal">Choose your package</h2>
           <p className="mt-1 text-sm text-muted">
-            GH₵ {currentPricePerGb.toFixed(2)} per GB · Non-expiry · Instant delivery
+            Live prices · Non-expiry · Instant delivery
           </p>
         </div>
       </div>
@@ -92,32 +123,40 @@ export const Shop: React.FC = () => {
         </div>
       ) : (
         <section className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-          {BUNDLE_SIZES.map((size) => {
-            const price = size * currentPricePerGb;
-            return (
-              <button
-                key={size}
-                type="button"
-                onClick={() => handleBuyClick({ size, price })}
-                className="card-elevated card-lift group overflow-hidden p-0 text-left"
-              >
-                <div className={cn('h-1', slug === 'mtn' && 'bg-mtn', slug === 'telecel' && 'bg-telecel', slug === 'at' && 'bg-at')} />
-                <div className="p-4">
+          {activePackages.map((pkg) => (
+            <button
+              key={pkg.id}
+              type="button"
+              onClick={() => handleBuyClick(pkg)}
+              className={cn(
+                'card-elevated card-lift group overflow-hidden p-0 text-left',
+                pkg.popular && 'ring-2 ring-gold/40'
+              )}
+            >
+              <div className={cn('h-1', slug === 'mtn' && 'bg-mtn', slug === 'telecel' && 'bg-telecel', slug === 'at' && 'bg-at')} />
+              <div className="p-4">
+                <div className="flex items-center justify-between">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-muted">Non-expiry</p>
-                  <p className="mt-2 text-2xl font-extrabold tabular-nums text-royal">
-                    {size} <span className="text-sm font-semibold text-muted">GB</span>
-                  </p>
-                  <p className="mt-1 text-sm font-bold text-gold-dark">GH₵ {price.toFixed(2)}</p>
-                  <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs font-bold text-royal">
-                    Buy now
-                    <span className="inline-flex rounded-lg gradient-accent px-2 py-1 text-white shadow-sm">
-                      <ArrowRight size={14} />
+                  {pkg.popular && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-gold/15 px-1.5 py-0.5 text-[9px] font-bold text-gold-dark">
+                      <Star className="h-2.5 w-2.5 fill-current" /> Popular
                     </span>
-                  </div>
+                  )}
                 </div>
-              </button>
-            );
-          })}
+                <p className="mt-2 text-2xl font-extrabold tabular-nums text-royal">
+                  {pkg.size_gb} <span className="text-sm font-semibold text-muted">GB</span>
+                </p>
+                {pkg.label && <p className="mt-0.5 text-[10px] font-semibold text-muted">{pkg.label}</p>}
+                <p className="mt-1 text-sm font-bold text-gold-dark">GH₵ {Number(pkg.price).toFixed(2)}</p>
+                <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs font-bold text-royal">
+                  Buy now
+                  <span className="inline-flex rounded-lg gradient-accent px-2 py-1 text-white shadow-sm">
+                    <ArrowRight size={14} />
+                  </span>
+                </div>
+              </div>
+            </button>
+          ))}
         </section>
       )}
     </div>

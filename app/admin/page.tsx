@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { DollarSign, Package, Zap, Radio, ArrowRight } from 'lucide-react';
+import { DollarSign, Package, Zap, Radio, ArrowRight, Users } from 'lucide-react';
 import Link from 'next/link';
 import { adminFetch } from '@/lib/api/admin-client';
 import { formatGHS } from '@/lib/admin-metrics';
@@ -108,10 +108,10 @@ export default function AdminDashboardPage() {
           <h3 className="mb-3 font-bold text-white">Quick links</h3>
           <div className="grid grid-cols-2 gap-2">
             {[
+              { href: '/admin/packages', icon: Package, label: 'Data packages' },
+              { href: '/admin/customers', icon: Users, label: 'Customers' },
               { href: '/admin/suppliers', icon: Radio, label: 'Supplier console' },
               { href: '/admin/momo', icon: DollarSign, label: 'MoMo matching' },
-              { href: '/admin/sms', icon: Package, label: 'SMS hub' },
-              { href: '/admin/settings', icon: Zap, label: 'Platform config' },
             ].map((item) => (
               <Link
                 key={item.href}
