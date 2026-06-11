@@ -5,10 +5,13 @@ import {
   bulkFulfillOrders,
   cancelOrder,
   cancelOrders,
+  createPromotion,
   creditCustomerWallet,
   fulfillOrder,
   getAnalyticsSummary,
+  getCustomerOrders,
   getOpsSummary,
+  getOrderDetails,
   getPlatformSettings,
   getSupplierRouting,
   listDisputes,
@@ -29,9 +32,13 @@ import {
   searchCustomers,
   searchOrder,
   sendTestSms,
+  setReferralsEnabled,
+  setSupplierRouting,
   updateCustomerRole,
   updatePackage,
+  updatePlatformConfig,
   updatePricePerGb,
+  updatePromotion,
 } from '@/lib/admin-chat-tools';
 import { SITE } from '@/lib/brand';
 import { checkRateLimit, clientIp } from '@/lib/security/rate-limit';
@@ -441,6 +448,119 @@ const ADMIN_TOOLS = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_order_details',
+      description: 'Full detail for one order incl. supplier reference, supplier error, and timestamps.',
+      parameters: {
+        type: 'object',
+        properties: { ref_or_id: { type: 'string' } },
+        required: ['ref_or_id'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_customer_orders',
+      description: 'Order history and total spend for a customer by user id or phone.',
+      parameters: {
+        type: 'object',
+        properties: {
+          user_id: { type: 'string' },
+          phone: { type: 'string' },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'set_supplier_routing',
+      description: 'Change which supplier (manual, skanka5, successbizhub) fulfils a network (mtn, telecel, at).',
+      parameters: {
+        type: 'object',
+        properties: {
+          network: { type: 'string', enum: ['mtn', 'telecel', 'at'] },
+          supplier_id: { type: 'string', enum: ['manual', 'skanka5', 'successbizhub'] },
+        },
+        required: ['network', 'supplier_id'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'create_promotion',
+      description: 'Create a promo code with a percent or fixed GH₵ discount.',
+      parameters: {
+        type: 'object',
+        properties: {
+          code: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          discount_percent: { type: 'number' },
+          discount_amount: { type: 'number' },
+          active: { type: 'boolean' },
+        },
+        required: ['code', 'title'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'update_promotion',
+      description: 'Activate/deactivate or edit a promo code by id.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          active: { type: 'boolean' },
+          title: { type: 'string' },
+          discount_percent: { type: 'number' },
+          discount_amount: { type: 'number' },
+        },
+        required: ['id'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'set_referrals_enabled',
+      description: 'Turn the referral rewards program on or off.',
+      parameters: {
+        type: 'object',
+        properties: { enabled: { type: 'boolean' } },
+        required: ['enabled'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'update_platform_config',
+      description:
+        'Update platform settings: SMS on/off, sender id, support WhatsApp, referral reward, order cooldown, SMS templates.',
+      parameters: {
+        type: 'object',
+        properties: {
+          sms_enabled: { type: 'boolean' },
+          sms_sender_id: { type: 'string' },
+          support_whatsapp: { type: 'string' },
+          whatsapp_channel_url: { type: 'string' },
+          referral_reward_ghs: { type: 'number' },
+          recipient_order_cooldown_minutes: { type: 'number' },
+          payment_received_template: { type: 'string' },
+          order_fulfilled_template: { type: 'string' },
+        },
+        required: [],
+      },
+    },
+  },
 ];
 
 async function executeAdminTool(
@@ -567,6 +687,58 @@ async function executeAdminTool(
           args.note as string | undefined
         ),
       };
+    case 'get_order_details':
+      return { result: await getOrderDetails(String(args.ref_or_id)) };
+    case 'get_customer_orders':
+      return {
+        result: await getCustomerOrders({
+          user_id: args.user_id as string | undefined,
+          phone: args.phone as string | undefined,
+        }),
+      };
+    case 'set_supplier_routing':
+      return {
+        result: await setSupplierRouting(String(args.network), String(args.supplier_id)),
+      };
+    case 'create_promotion':
+      return {
+        result: await createPromotion({
+          code: String(args.code),
+          title: String(args.title),
+          description: args.description as string | undefined,
+          discountPercent: args.discount_percent !== undefined ? Number(args.discount_percent) : undefined,
+          discountAmount: args.discount_amount !== undefined ? Number(args.discount_amount) : undefined,
+          active: args.active as boolean | undefined,
+        }),
+      };
+    case 'update_promotion':
+      return {
+        result: await updatePromotion(String(args.id), {
+          active: args.active as boolean | undefined,
+          title: args.title as string | undefined,
+          discountPercent: args.discount_percent !== undefined ? Number(args.discount_percent) : undefined,
+          discountAmount: args.discount_amount !== undefined ? Number(args.discount_amount) : undefined,
+        }),
+      };
+    case 'set_referrals_enabled':
+      return { result: await setReferralsEnabled(Boolean(args.enabled)) };
+    case 'update_platform_config':
+      return {
+        result: await updatePlatformConfig({
+          smsEnabled: args.sms_enabled as boolean | undefined,
+          smsSenderId: args.sms_sender_id as string | undefined,
+          supportWhatsApp: args.support_whatsapp as string | undefined,
+          whatsappChannelUrl: args.whatsapp_channel_url as string | undefined,
+          referralRewardGhs:
+            args.referral_reward_ghs !== undefined ? Number(args.referral_reward_ghs) : undefined,
+          recipientOrderCooldownMinutes:
+            args.recipient_order_cooldown_minutes !== undefined
+              ? Number(args.recipient_order_cooldown_minutes)
+              : undefined,
+          paymentReceivedTemplate: args.payment_received_template as string | undefined,
+          orderFulfilledTemplate: args.order_fulfilled_template as string | undefined,
+        }),
+      };
     default:
       return { result: { ok: false, error: 'Unknown tool' } };
   }
@@ -630,13 +802,15 @@ You help authenticated admins run the platform. You are NOT the customer-facing 
 
 Capabilities (use tools — never guess):
 - Ops queue: pending delivery, manual fulfilment, supplier failures, unmatched MoMo, disputes
-- Orders: search, list, fulfill (single/bulk), cancel, retry supplier, resolve manual, poll supplier status
-- Suppliers: ping API, routing matrix, supplier logs
-- Payments: list/match unmatched MoMo events to orders
-- Customers: search profiles, credit/debit wallets, update roles (confirm amounts before debits)
-- Catalog: list/update packages, promotions, global price per GB, platform config
+- Orders: search, list, full detail (incl supplier error), fulfill (single/bulk), cancel, retry supplier, resolve manual, poll supplier status
+- Suppliers: ping API, view + change network routing (set_supplier_routing), supplier logs
+- Payments: list/match unmatched MoMo events to orders, list transactions
+- Customers: search profiles, order history + spend, credit/debit wallets, update roles (confirm amounts before debits)
+- Catalog: list/update packages, global price per GB
+- Promotions: list, create, activate/deactivate promo codes
+- Settings: view + update platform config (SMS on/off, sender id, support WhatsApp, referral reward, cooldown, SMS templates), toggle referrals
 - Comms: SMS logs, send test SMS
-- Analytics: GMV, fulfillment rate, payment mix, network breakdown, referrals, transactions
+- Analytics: GMV, fulfillment rate, payment mix, network breakdown, referrals
 
 Rules:
 - Be concise and action-oriented. Use GH₵ for money.

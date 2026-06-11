@@ -2,7 +2,7 @@ import 'server-only';
 
 import { fetchAdminNotifications } from '@/lib/data/notifications';
 import { computeAdminMetrics, formatGHS } from '@/lib/admin-metrics';
-import { getPlatformConfig } from '@/lib/data/platform-config';
+import { getPlatformConfig, savePlatformConfig } from '@/lib/data/platform-config';
 import {
   fetchAwaitingManualOrders,
   fetchFailedSupplierOrders,
@@ -636,4 +636,167 @@ export async function creditCustomerWallet(userId: string, amount: number, note?
   const result = await adjustCustomerWallet(userId, amount);
   if (!result.ok) return result;
   return { ...result, note: note ?? 'Admin credit' };
+}
+
+export async function getOrderDetails(refOrId: string) {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  const order = await findOrderByRefOrId(refOrId);
+  if (!order) return { ok: false as const, error: 'Order not found' };
+  return {
+    ok: true as const,
+    order: {
+      ...summarizeOrder(order),
+      payment_method: order.payment_method,
+      supplier: order.supplier ?? null,
+      supplier_reference: order.supplier_reference ?? null,
+      supplier_order_code: order.supplier_order_code ?? null,
+      supplier_error: order.supplier_error ?? null,
+      supplier_submitted_at: order.supplier_submitted_at ?? null,
+      supplier_fulfilled_at: order.supplier_fulfilled_at ?? null,
+      user_id: order.user_id,
+    },
+  };
+}
+
+export async function getCustomerOrders(args: { user_id?: string; phone?: string }) {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  const service = createServiceClient();
+  let query = service.from('orders').select('*').order('created_at', { ascending: false }).limit(20);
+
+  if (args.user_id?.trim()) {
+    query = query.eq('user_id', args.user_id.trim());
+  } else if (args.phone?.trim()) {
+    const phone = args.phone.replace(/\D/g, '');
+    query = query.or(`phone.ilike.%${phone}%,phone.ilike.%${phone.slice(-9)}%`);
+  } else {
+    return { ok: false as const, error: 'Provide user_id or phone' };
+  }
+
+  const { data, error } = await query;
+  if (error) return { ok: false as const, error: error.message };
+  const orders = ((data ?? []) as Order[]).map(summarizeOrder);
+  const spent = (data ?? [])
+    .filter((o) => o.payment_status === 'paid')
+    .reduce((sum, o) => sum + Number(o.amount), 0);
+  return { ok: true as const, count: orders.length, totalSpent: formatGHS(spent), orders };
+}
+
+export async function setSupplierRouting(network: string, supplierId: string) {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  const net = network.trim().toLowerCase();
+  const sup = supplierId.trim().toLowerCase();
+  if (!['mtn', 'telecel', 'at'].includes(net)) {
+    return { ok: false as const, error: 'Network must be mtn, telecel, or at' };
+  }
+  if (!['manual', 'skanka5', 'successbizhub'].includes(sup)) {
+    return { ok: false as const, error: 'Supplier must be manual, skanka5, or successbizhub' };
+  }
+  const config = await getPlatformConfig();
+  await savePlatformConfig({
+    ...config,
+    supplierRouting: { ...config.supplierRouting, [net]: sup as 'manual' | 'skanka5' | 'successbizhub' },
+  });
+  return { ok: true as const, network: net, supplier: sup };
+}
+
+export async function createPromotion(args: {
+  code: string;
+  title: string;
+  description?: string;
+  discountPercent?: number;
+  discountAmount?: number;
+  active?: boolean;
+}) {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  if (!args.code?.trim() || !args.title?.trim()) {
+    return { ok: false as const, error: 'code and title are required' };
+  }
+  const service = createServiceClient();
+  const { data, error } = await service
+    .from('promotions')
+    .insert({
+      code: args.code.trim().toUpperCase(),
+      title: args.title.trim(),
+      description: args.description?.trim() || null,
+      discount_percent: args.discountPercent != null ? Number(args.discountPercent) : null,
+      discount_amount: args.discountAmount != null ? Number(args.discountAmount) : null,
+      active: args.active ?? true,
+    })
+    .select()
+    .single();
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const, promotion: data };
+}
+
+export async function updatePromotion(
+  id: string,
+  patch: { active?: boolean; title?: string; discountPercent?: number; discountAmount?: number }
+) {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  if (!id?.trim()) return { ok: false as const, error: 'Promotion id required' };
+  const update: Record<string, unknown> = {};
+  if (patch.active !== undefined) update.active = Boolean(patch.active);
+  if (patch.title !== undefined) update.title = String(patch.title).trim();
+  if (patch.discountPercent !== undefined) update.discount_percent = Number(patch.discountPercent);
+  if (patch.discountAmount !== undefined) update.discount_amount = Number(patch.discountAmount);
+  if (!Object.keys(update).length) return { ok: false as const, error: 'Nothing to update' };
+
+  const service = createServiceClient();
+  const { data, error } = await service.from('promotions').update(update).eq('id', id).select().single();
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const, promotion: data };
+}
+
+export async function setReferralsEnabled(enabled: boolean) {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  const service = createServiceClient();
+  const { error } = await service.from('settings').upsert({ id: 1, referrals_enabled: Boolean(enabled) });
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const, referrals_enabled: Boolean(enabled) };
+}
+
+export async function updatePlatformConfig(patch: {
+  smsEnabled?: boolean;
+  smsSenderId?: string;
+  supportWhatsApp?: string;
+  whatsappChannelUrl?: string;
+  referralRewardGhs?: number;
+  recipientOrderCooldownMinutes?: number;
+  paymentReceivedTemplate?: string;
+  orderFulfilledTemplate?: string;
+}) {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  const config = await getPlatformConfig();
+
+  const next = {
+    ...config,
+    referralRewardGhs: patch.referralRewardGhs ?? config.referralRewardGhs,
+    recipientOrderCooldownMinutes:
+      patch.recipientOrderCooldownMinutes ?? config.recipientOrderCooldownMinutes,
+    contact: {
+      supportWhatsApp: patch.supportWhatsApp ?? config.contact.supportWhatsApp,
+      whatsappChannelUrl: patch.whatsappChannelUrl ?? config.contact.whatsappChannelUrl,
+    },
+    moolreSms: {
+      enabled: patch.smsEnabled ?? config.moolreSms.enabled,
+      senderId: patch.smsSenderId ?? config.moolreSms.senderId,
+    },
+    smsTemplates: {
+      ...config.smsTemplates,
+      paymentReceived: patch.paymentReceivedTemplate ?? config.smsTemplates.paymentReceived,
+      orderFulfilled: patch.orderFulfilledTemplate ?? config.smsTemplates.orderFulfilled,
+    },
+  };
+
+  await savePlatformConfig(next);
+  return {
+    ok: true as const,
+    config: {
+      smsEnabled: next.moolreSms.enabled,
+      smsSenderId: next.moolreSms.senderId,
+      contact: next.contact,
+      referralRewardGhs: next.referralRewardGhs,
+      recipientOrderCooldownMinutes: next.recipientOrderCooldownMinutes,
+    },
+  };
 }
