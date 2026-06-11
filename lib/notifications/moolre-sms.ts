@@ -2,7 +2,12 @@ import 'server-only';
 import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admin';
 import { getPlatformConfig } from '@/lib/data/platform-config';
 
-export type SmsTemplate = 'payment_received' | 'order_fulfilled' | 'wallet_topup_admin' | 'test';
+export type SmsTemplate =
+  | 'payment_received'
+  | 'order_fulfilled'
+  | 'wallet_topup_admin'
+  | 'new_order_admin'
+  | 'test';
 
 function formatPhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
@@ -194,6 +199,32 @@ export async function smsWalletTopUpAdmin(args: {
     ref: args.ref,
     triggeredBy: args.triggeredBy,
     context: { amount: args.amount, name: args.name, phone: args.phone, type: 'wallet_topup' },
+  });
+}
+
+export async function smsNewOrderAdmin(args: {
+  network: string;
+  bundle: string;
+  phone: string;
+  amount: number;
+  ref: string;
+  paymentMethod?: string;
+}) {
+  const config = await getPlatformConfig();
+  const adminPhone = config.contact.supportWhatsApp || process.env.ADMIN_NOTIFY_PHONE || '';
+  if (!adminPhone) return { ok: false, error: 'Admin notify phone not configured' };
+
+  const method = (args.paymentMethod || 'momo').toUpperCase();
+  const message = `FDS ADMIN: New ${method} order ${args.network} ${args.bundle} for ${args.phone}. GH₵${args.amount.toFixed(
+    2
+  )}. Ref: ${args.ref}.`;
+
+  return sendMoolreSms({
+    phone: adminPhone,
+    message,
+    template: 'new_order_admin',
+    ref: args.ref,
+    context: { type: 'new_order', network: args.network, bundle: args.bundle, amount: args.amount },
   });
 }
 

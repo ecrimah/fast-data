@@ -5,6 +5,7 @@ import { DeliveryStatus, Network, PaymentStatus } from '@/types';
 import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admin';
 import { initMoolrePayment } from '@/lib/moolre-payment';
 import { dispatchOrderToSupplier } from '@/lib/suppliers/dispatch-order';
+import { notifyNewPaidOrder } from '@/lib/notifications/order-events';
 import { SITE_KNOWLEDGE } from '@/lib/site-knowledge';
 import { SITE } from '@/lib/brand';
 import { getActivePackages, resolvePackagePrice } from '@/lib/packages/pricing';
@@ -216,6 +217,7 @@ export async function createChatOrder(args: {
   }
 
   if (args.paymentMethod === 'wallet') {
+    notifyNewPaidOrder(order.id).catch(console.error);
     await dispatchOrderToSupplier(order.id);
     return {
       ok: true,

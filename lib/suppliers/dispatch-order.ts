@@ -89,7 +89,10 @@ export async function markOrderFulfilledByReference(args: {
   if (!hasSupabaseAdminConfig()) return false;
 
   const service = createServiceClient();
-  let query = service.from('orders').select('id').limit(1);
+  let query = service
+    .from('orders')
+    .select('id, phone, bundle_size, payment_ref, delivery_status')
+    .limit(1);
 
   if (args.orderCode) {
     query = query.eq('supplier_order_code', args.orderCode);
@@ -102,6 +105,8 @@ export async function markOrderFulfilledByReference(args: {
   const { data } = await query.maybeSingle();
   if (!data?.id) return false;
 
+  const alreadyDelivered = data.delivery_status === DeliveryStatus.DELIVERED;
+
   await service
     .from('orders')
     .update({
@@ -110,6 +115,16 @@ export async function markOrderFulfilledByReference(args: {
       supplier_fulfilled_at: new Date().toISOString(),
     })
     .eq('id', data.id);
+
+  // Only notify the customer on the first transition to delivered.
+  if (!alreadyDelivered) {
+    const { smsOrderFulfilled } = await import('@/lib/notifications/moolre-sms');
+    smsOrderFulfilled({
+      phone: data.phone,
+      bundle: data.bundle_size,
+      ref: data.payment_ref,
+    }).catch(console.error);
+  }
 
   return true;
 }
