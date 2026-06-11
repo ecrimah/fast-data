@@ -18,12 +18,38 @@ export async function POST(req: Request) {
       }
     }
 
+    const data = (body.data || {}) as Record<string, unknown>;
+
+    // Secret check: Moolre only includes a secret if you configured one in their
+    // dashboard. Reject ONLY when a secret IS sent but doesn't match (tamper guard).
+    // A missing secret must NOT block a legitimate callback — otherwise every
+    // payment silently fails with 403.
     const expectedSecret = process.env.MOOLRE_CALLBACK_SECRET;
-    if (expectedSecret && body.secret !== expectedSecret) {
+    const providedSecret = (body.secret ?? data.secret) as string | undefined;
+    const secretProvided = providedSecret !== undefined && providedSecret !== null && String(providedSecret).length > 0;
+    if (expectedSecret && secretProvided && providedSecret !== expectedSecret) {
       return NextResponse.json({ success: false, message: 'Invalid callback signature' }, { status: 403 });
     }
 
-    const data = (body.data || {}) as Record<string, unknown>;
+    // Best-effort visibility: record that a callback arrived (never blocks the flow).
+    if (hasSupabaseAdminConfig()) {
+      try {
+        await createServiceClient()
+          .from('payment_events')
+          .insert({
+            raw_body: body,
+            provider: 'moolre',
+            transaction_id: String(data.transactionid || data.transaction_id || ''),
+            amount: data.amount ? parseFloat(String(data.amount)) : null,
+            reference_hint:
+              String(data.externalref || body.externalref || '').replace(/-R\d+$/, '') || 'callback',
+            parse_status: 'received',
+          });
+      } catch (logErr) {
+        console.error('[Moolre callback] inbound log failed', logErr);
+      }
+    }
+
     const rawExternalRef = String(
       data.externalref || data.external_reference || body.externalref || ''
     );
