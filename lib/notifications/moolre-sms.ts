@@ -86,6 +86,13 @@ export async function sendMoolreSms(args: {
     return { ok: false, error: 'Moolre SMS not configured' };
   }
 
+  // Moolre requires the SMS ref to be globally unique per send. Two notifications
+  // for the same order (e.g. admin alert + customer receipt) share a payment ref,
+  // so we append a unique suffix to avoid "ref is not unique" rejections.
+  const uniqueRef = `${args.ref ?? args.template}-${Date.now().toString(36)}${Math.random()
+    .toString(36)
+    .slice(2, 7)}`;
+
   try {
     const res = await fetch('https://api.moolre.com/open/sms/send', {
       method: 'POST',
@@ -97,7 +104,7 @@ export async function sendMoolreSms(args: {
       body: JSON.stringify({
         type: 1,
         senderid: config.moolreSms.senderId || 'FDS',
-        messages: [{ recipient, message: args.message, ref: args.ref ?? undefined }],
+        messages: [{ recipient, message: args.message, ref: uniqueRef }],
       }),
     });
 
