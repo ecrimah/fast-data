@@ -2,8 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bundle, Network, User, PaymentStatus } from '../types';
-import { createOrder } from '../services/supabaseDatabase';
+import { Bundle, Network, User } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { getCheckoutState } from '@/lib/navigationState';
 import { Loader2, Smartphone, CreditCard, Wallet, AlertCircle } from 'lucide-react';
@@ -68,58 +67,43 @@ export const Checkout: React.FC<CheckoutProps> = ({ user }) => {
 
     setLoading(true);
     try {
-      const orderUser =
-        user ||
-        ({
-          id: 'guest',
-          email: 'guest@fastdataservices.com',
-          name: 'Guest',
-          role: 'user',
-          wallet_balance: 0,
-          referral_code: '',
-          created_at: '',
-        } as User);
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+      if (user) {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          headers.Authorization = `Bearer ${session.access_token}`;
+        } else if (paymentMethod === 'wallet') {
+          throw new Error('Please sign in again to pay with your wallet.');
+        }
+      }
+
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          network,
+          sizeGb: bundle.size,
+          phone,
+          paymentMethod,
+        }),
+      });
+      const result = await res.json();
+
+      if (!res.ok || !result.success) {
+        throw new Error(result.message || 'Payment failed. Please try again.');
+      }
 
       if (paymentMethod === 'moolre') {
-        const order = await createOrder(
-          orderUser,
-          network,
-          bundle.size,
-          phone,
-          'moolre',
-          PaymentStatus.PENDING
-        );
-        const paymentRes = await fetch('/api/payment/moolre', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId: order.id, customerEmail: orderUser.email }),
-        });
-        const paymentResult = await paymentRes.json();
-        if (!paymentResult.success || !paymentResult.url) {
-          throw new Error(paymentResult.message || 'Could not start Moolre payment');
+        if (!result.paymentUrl) {
+          throw new Error('Could not start MoMo payment. Please try again.');
         }
-        window.location.href = paymentResult.url;
+        window.location.href = result.paymentUrl;
         return;
       }
 
-      const order = await createOrder(orderUser, network, bundle.size, phone, 'wallet', PaymentStatus.PAID);
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error('Please sign in again');
-
-      const dispatchRes = await fetch('/api/orders/dispatch', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ orderId: order.id }),
-      });
-      if (!dispatchRes.ok) {
-        const d = await dispatchRes.json().catch(() => ({}));
-        throw new Error(d.error || 'Could not dispatch order');
-      }
       router.push('/success');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Payment failed.');
