@@ -9,12 +9,71 @@ export type SmsTemplate =
   | 'new_order_admin'
   | 'test';
 
-function formatPhone(phone: string): string {
+export function formatPhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
   if (digits.startsWith('233')) return digits;
   if (digits.startsWith('0')) return `233${digits.slice(1)}`;
   if (digits.length === 9) return `233${digits}`;
   return digits;
+}
+
+/**
+ * Validate that a string normalizes to a plausible Ghana MSISDN (233 + 9 digits).
+ * Returns the normalized number or null.
+ */
+export function normalizeGhanaPhone(phone: string): string | null {
+  const normalized = formatPhone(phone);
+  return /^233\d{9}$/.test(normalized) ? normalized : null;
+}
+
+function uniqueSmsRef(seed?: string): string {
+  return `${seed ?? 'sms'}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+}
+
+export type BulkSmsMessage = { recipient: string; message: string; ref?: string };
+
+/**
+ * Low-level bulk send. Posts up to ~100 messages in a single Moolre call.
+ * Does NOT log to sms_logs (campaigns track their own per-recipient status)
+ * and does NOT enforce suppression — callers must filter first.
+ */
+export async function sendMoolreBulk(
+  messages: BulkSmsMessage[],
+  opts?: { senderId?: string }
+): Promise<{ ok: boolean; error?: string; response?: unknown }> {
+  if (!messages.length) return { ok: true };
+
+  if ((!process.env.MOOLRE_API_VASKEY && !process.env.MOOLRE_SMS_API_KEY) || !process.env.MOOLRE_API_USER) {
+    return { ok: false, error: 'Moolre SMS not configured' };
+  }
+
+  const config = await getPlatformConfig();
+  const senderId = opts?.senderId || config.moolreSms.senderId || 'FDS';
+
+  try {
+    const res = await fetch('https://api.moolre.com/open/sms/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-USER': process.env.MOOLRE_API_USER,
+        'X-API-VASKEY': process.env.MOOLRE_API_VASKEY || process.env.MOOLRE_SMS_API_KEY || '',
+      },
+      body: JSON.stringify({
+        type: 1,
+        senderid: senderId,
+        messages: messages.map((m) => ({
+          recipient: formatPhone(m.recipient),
+          message: m.message,
+          ref: m.ref ?? uniqueSmsRef(),
+        })),
+      }),
+    });
+    const response = await res.json().catch(() => ({}));
+    const ok = response?.status === 1;
+    return ok ? { ok: true, response } : { ok: false, error: response?.message || 'Bulk send failed', response };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Bulk send error' };
+  }
 }
 
 function renderTemplate(template: string, vars: Record<string, string>) {
