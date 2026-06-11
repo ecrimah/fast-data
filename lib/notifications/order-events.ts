@@ -2,6 +2,7 @@ import 'server-only';
 import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admin';
 import { smsNewOrderAdmin } from '@/lib/notifications/moolre-sms';
 import { emailNewOrderAdmin, emailOrderReceiptCustomer } from '@/lib/notifications/email';
+import { getGuestUserId } from '@/lib/auth/guest-user';
 
 /**
  * Fan-out notifications for a newly paid order:
@@ -27,7 +28,7 @@ export async function notifyNewPaidOrder(orderId: string): Promise<void> {
 
     let customerEmail: string | null = null;
     let customerName: string | undefined;
-    const guestId = process.env.CHAT_GUEST_USER_ID?.trim();
+    const guestId = await getGuestUserId();
 
     if (order.user_id && order.user_id !== guestId) {
       const { data: profile } = await service

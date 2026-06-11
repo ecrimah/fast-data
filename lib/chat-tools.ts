@@ -6,6 +6,7 @@ import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admi
 import { initMoolrePayment } from '@/lib/moolre-payment';
 import { dispatchOrderToSupplier } from '@/lib/suppliers/dispatch-order';
 import { notifyNewPaidOrder } from '@/lib/notifications/order-events';
+import { getGuestUserId } from '@/lib/auth/guest-user';
 import { SITE_KNOWLEDGE } from '@/lib/site-knowledge';
 import { SITE } from '@/lib/brand';
 import { getActivePackages, resolvePackagePrice } from '@/lib/packages/pricing';
@@ -157,7 +158,7 @@ export async function createChatOrder(args: {
 
   const supabase = createServiceClient();
 
-  const guestUserId = process.env.CHAT_GUEST_USER_ID?.trim();
+  const guestUserId = await getGuestUserId();
   const userId = args.user?.id ?? guestUserId;
 
   if (!userId) {
