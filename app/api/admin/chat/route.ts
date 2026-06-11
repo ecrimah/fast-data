@@ -2,23 +2,40 @@ import { NextResponse } from 'next/server';
 import { assertAdminApi } from '@/lib/auth/admin-api';
 import {
   adjustCustomerWallet,
+  bulkFulfillOrders,
   cancelOrder,
   cancelOrders,
+  creditCustomerWallet,
   fulfillOrder,
   getAnalyticsSummary,
   getOpsSummary,
+  getPlatformSettings,
+  getSupplierRouting,
+  listDisputes,
   listOrders,
   listPackages,
+  listPromotions,
+  listReferralRewards,
+  listSmsLogs,
+  listSupplierLogs,
+  listTransactions,
   listUnmatchedPayments,
   matchPayment,
+  pingSupplier,
+  pollSupplierOrderStatus,
+  resolveDispute,
   resolveManualOrder,
   retrySupplierOrder,
   searchCustomers,
   searchOrder,
+  sendTestSms,
+  updateCustomerRole,
   updatePackage,
   updatePricePerGb,
 } from '@/lib/admin-chat-tools';
 import { SITE } from '@/lib/brand';
+import { checkRateLimit, clientIp } from '@/lib/security/rate-limit';
+import { truncateForLlm } from '@/lib/security/sanitize';
 
 const LLM_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const LLM_MODEL = 'llama-3.3-70b-versatile';
@@ -253,6 +270,177 @@ const ADMIN_TOOLS = [
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'bulk_fulfill_orders',
+      description: 'Mark multiple orders as fulfilled by payment refs or order ids.',
+      parameters: {
+        type: 'object',
+        properties: {
+          ref_or_ids: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['ref_or_ids'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'ping_supplier',
+      description: 'Ping a supplier API (successbizhub, skanka5) to check connectivity and balance.',
+      parameters: {
+        type: 'object',
+        properties: { supplier_id: { type: 'string', enum: ['successbizhub', 'skanka5', 'manual'] } },
+        required: ['supplier_id'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_supplier_routing',
+      description: 'Show which supplier handles each network (MTN, Telecel, AT).',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'list_supplier_logs',
+      description: 'Recent supplier dispatch logs, failures, and manual queue.',
+      parameters: {
+        type: 'object',
+        properties: { limit: { type: 'number' } },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'poll_order_status',
+      description: 'Poll SuccessBiz/DataCore for live status of an order by reference.',
+      parameters: {
+        type: 'object',
+        properties: { identifier: { type: 'string' } },
+        required: ['identifier'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'list_disputes',
+      description: 'List open and recent customer disputes.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'resolve_dispute',
+      description: 'Mark a dispute as resolved with optional resolution note.',
+      parameters: {
+        type: 'object',
+        properties: {
+          dispute_id: { type: 'string' },
+          resolution: { type: 'string' },
+        },
+        required: ['dispute_id'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'list_referrals',
+      description: 'List recent referral reward payouts.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'list_transactions',
+      description: 'List recent wallet transactions (top-ups, debits).',
+      parameters: {
+        type: 'object',
+        properties: { limit: { type: 'number' } },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'list_sms_logs',
+      description: 'Recent SMS notification delivery logs.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'send_test_sms',
+      description: 'Send a test SMS via Moolre to verify SMS delivery.',
+      parameters: {
+        type: 'object',
+        properties: {
+          phone: { type: 'string' },
+          message: { type: 'string' },
+        },
+        required: ['phone', 'message'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_platform_config',
+      description: 'Platform settings: price per GB, referrals, contact info, supplier routing.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'update_customer_role',
+      description: 'Change a customer profile role (user, admin, agent).',
+      parameters: {
+        type: 'object',
+        properties: {
+          user_id: { type: 'string' },
+          role: { type: 'string', enum: ['user', 'admin', 'agent'] },
+        },
+        required: ['user_id', 'role'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'list_promotions',
+      description: 'List promo codes and campaigns.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'credit_customer_wallet',
+      description: 'Credit a customer wallet (positive amount only).',
+      parameters: {
+        type: 'object',
+        properties: {
+          user_id: { type: 'string' },
+          amount: { type: 'number' },
+          note: { type: 'string' },
+        },
+        required: ['user_id', 'amount'],
+      },
+    },
+  },
 ];
 
 async function executeAdminTool(
@@ -335,6 +523,50 @@ async function executeAdminTool(
       return { result: await updatePricePerGb(Number(args.price)) };
     case 'get_analytics_summary':
       return { result: await getAnalyticsSummary() };
+    case 'bulk_fulfill_orders': {
+      const ids = Array.isArray(args.ref_or_ids) ? args.ref_or_ids.map(String) : [];
+      return { result: await bulkFulfillOrders(ids, ctx) };
+    }
+    case 'ping_supplier':
+      return { result: await pingSupplier(String(args.supplier_id)) };
+    case 'get_supplier_routing':
+      return { result: await getSupplierRouting() };
+    case 'list_supplier_logs':
+      return { result: await listSupplierLogs(Number(args.limit) || 15) };
+    case 'poll_order_status':
+      return { result: await pollSupplierOrderStatus(String(args.identifier)) };
+    case 'list_disputes':
+      return { result: await listDisputes() };
+    case 'resolve_dispute':
+      return {
+        result: await resolveDispute(String(args.dispute_id), args.resolution as string | undefined),
+      };
+    case 'list_referrals':
+      return { result: await listReferralRewards() };
+    case 'list_transactions':
+      return { result: await listTransactions(Number(args.limit) || 20) };
+    case 'list_sms_logs':
+      return { result: await listSmsLogs() };
+    case 'send_test_sms':
+      return {
+        result: await sendTestSms(String(args.phone), String(args.message), ctx),
+      };
+    case 'get_platform_config':
+      return { result: await getPlatformSettings() };
+    case 'update_customer_role':
+      return {
+        result: await updateCustomerRole(String(args.user_id), String(args.role)),
+      };
+    case 'list_promotions':
+      return { result: await listPromotions() };
+    case 'credit_customer_wallet':
+      return {
+        result: await creditCustomerWallet(
+          String(args.user_id),
+          Number(args.amount),
+          args.note as string | undefined
+        ),
+      };
     default:
       return { result: { ok: false, error: 'Unknown tool' } };
   }
@@ -360,6 +592,14 @@ async function handleWithoutAI(query: string): Promise<string> {
 export async function POST(request: Request) {
   const auth = await assertAdminApi(request);
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
+  const rate = checkRateLimit(`admin-chat:${auth.userId}:${clientIp(request)}`, { max: 40, windowMs: 60_000 });
+  if (!rate.ok) {
+    return NextResponse.json(
+      { response: `Too many requests. Try again in ${rate.retryAfterSec}s.` },
+      { status: 429 }
+    );
+  }
 
   try {
     const body: RequestBody = await request.json();
@@ -390,11 +630,13 @@ You help authenticated admins run the platform. You are NOT the customer-facing 
 
 Capabilities (use tools — never guess):
 - Ops queue: pending delivery, manual fulfilment, supplier failures, unmatched MoMo, disputes
-- Orders: search, list, mark fulfilled, cancel (cancel_order / cancel_orders), retry supplier, resolve manual orders
+- Orders: search, list, fulfill (single/bulk), cancel, retry supplier, resolve manual, poll supplier status
+- Suppliers: ping API, routing matrix, supplier logs
 - Payments: list/match unmatched MoMo events to orders
-- Customers: search profiles, credit/debit wallets (confirm amounts before debits)
-- Catalog: list/update packages, change global price per GB
-- Analytics: GMV, fulfillment rate, payment mix, network breakdown
+- Customers: search profiles, credit/debit wallets, update roles (confirm amounts before debits)
+- Catalog: list/update packages, promotions, global price per GB, platform config
+- Comms: SMS logs, send test SMS
+- Analytics: GMV, fulfillment rate, payment mix, network breakdown, referrals, transactions
 
 Rules:
 - Be concise and action-oriented. Use GH₵ for money.
@@ -504,7 +746,7 @@ Rules:
             role: 'tool',
             tool_call_id: tc.id,
             name: fn.name,
-            content: JSON.stringify(result),
+            content: truncateForLlm(result),
           });
         }
         continue;
@@ -529,6 +771,9 @@ Rules:
   } catch (error) {
     console.error('[admin/chat]', error);
     const message = error instanceof Error ? error.message : 'Unexpected error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({
+      response: `Tay Ops hit an error: ${message}. Try again or use a shorter request.`,
+      quickReplies: ['Check queue', 'Pending orders', 'Analytics'],
+    });
   }
 }

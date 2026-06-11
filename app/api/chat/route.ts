@@ -8,6 +8,7 @@ import {
   type ChatOrder,
 } from '@/lib/chat-tools';
 import { SITE } from '@/lib/brand';
+import { checkRateLimit, clientIp } from '@/lib/security/rate-limit';
 import { getPricePerGb } from '@/services/supabaseDatabase';
 
 const LLM_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -179,6 +180,14 @@ async function handleWithoutAI(query: string): Promise<string> {
 }
 
 export async function POST(request: Request) {
+  const rate = checkRateLimit(`chat:${clientIp(request)}`, { max: 25, windowMs: 60_000 });
+  if (!rate.ok) {
+    return NextResponse.json(
+      { response: `Too many messages. Please wait ${rate.retryAfterSec} seconds.` },
+      { status: 429 }
+    );
+  }
+
   try {
     const body: RequestBody = await request.json();
     const history: ChatMessage[] = Array.isArray(body.messages) ? body.messages : [];

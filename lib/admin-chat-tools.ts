@@ -2,10 +2,20 @@ import 'server-only';
 
 import { fetchAdminNotifications } from '@/lib/data/notifications';
 import { computeAdminMetrics, formatGHS } from '@/lib/admin-metrics';
+import { getPlatformConfig } from '@/lib/data/platform-config';
+import {
+  fetchAwaitingManualOrders,
+  fetchFailedSupplierOrders,
+  fetchSupplierLogs,
+  fetchSupplierSummary,
+} from '@/lib/data/supplier-logs';
 import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admin';
 import { dispatchOrderToSupplier } from '@/lib/suppliers/dispatch-order';
+import { getNetworkSupplierMatrix, getSupplierById } from '@/lib/suppliers/registry';
+import { pollOrderStatus } from '@/lib/suppliers/successbizhub';
 import { completePaidOrder } from '@/services/payment/complete-order';
-import { smsOrderFulfilled } from '@/lib/notifications/moolre-sms';
+import { smsOrderFulfilled, smsTest } from '@/lib/notifications/moolre-sms';
+import { sanitizeIlikeTerm } from '@/lib/security/sanitize';
 import { DeliveryStatus, PaymentStatus, type Order } from '@/types';
 
 export type AdminChatCtx = { adminUserId: string };
@@ -366,8 +376,8 @@ export async function searchCustomers(search?: string) {
     .limit(20);
 
   if (search?.trim()) {
-    const s = search.trim();
-    query = query.or(`email.ilike.%${s}%,phone.ilike.%${s}%,name.ilike.%${s}%`);
+    const s = sanitizeIlikeTerm(search);
+    if (s) query = query.or(`email.ilike.%${s}%,phone.ilike.%${s}%,name.ilike.%${s}%`);
   }
 
   const { data, error } = await query;
@@ -477,4 +487,153 @@ export async function getAnalyticsSummary() {
     byNetwork: metrics.byNetwork,
     byMethod,
   };
+}
+
+export async function bulkFulfillOrders(refOrIds: string[], ctx: AdminChatCtx) {
+  if (!refOrIds.length) return { ok: false as const, error: 'Provide order refs or ids' };
+  const results = [];
+  for (const ref of refOrIds) {
+    results.push(await fulfillOrder(ref, ctx));
+  }
+  const ok = results.filter((r) => r.ok).length;
+  return { ok: ok > 0, fulfilled: ok, failed: results.length - ok, results };
+}
+
+export async function pingSupplier(supplierId: string) {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  const client = getSupplierById(supplierId?.trim().toLowerCase());
+  if (!client?.ping) return { ok: false as const, error: 'Unknown or non-pingable supplier' };
+  if (!client.isConfigured()) return { ok: false as const, error: `${supplierId} not configured` };
+  const result = await client.ping();
+  return result.ok
+    ? { ok: true as const, supplier: supplierId, data: result.raw }
+    : { ok: false as const, error: result.error ?? 'Ping failed' };
+}
+
+export async function getSupplierRouting() {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  return { ok: true as const, suppliers: getNetworkSupplierMatrix() };
+}
+
+export async function listSupplierLogs(limit = 15) {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  const [logs, summary, awaitingManual, failed] = await Promise.all([
+    fetchSupplierLogs(Math.min(limit, 30)),
+    fetchSupplierSummary(),
+    fetchAwaitingManualOrders(),
+    fetchFailedSupplierOrders(),
+  ]);
+  return { ok: true as const, summary, awaitingManual, failed, logs };
+}
+
+export async function listDisputes() {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  const service = createServiceClient();
+  const { data, error } = await service
+    .from('disputes')
+    .select('id, order_id, reason, status, created_at, resolution')
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const, disputes: data ?? [] };
+}
+
+export async function resolveDispute(disputeId: string, resolution?: string) {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  const service = createServiceClient();
+  const { error } = await service
+    .from('disputes')
+    .update({
+      status: 'resolved',
+      resolution: resolution?.trim() || null,
+      resolved_at: new Date().toISOString(),
+    })
+    .eq('id', disputeId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const, disputeId };
+}
+
+export async function listReferralRewards() {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  const service = createServiceClient();
+  const { data } = await service
+    .from('referral_rewards')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(20);
+  return { ok: true as const, rewards: data ?? [] };
+}
+
+export async function listTransactions(limit = 20) {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  const service = createServiceClient();
+  const { data } = await service
+    .from('transactions')
+    .select('id, user_id, type, amount, status, reference, created_at')
+    .order('created_at', { ascending: false })
+    .limit(Math.min(limit, 50));
+  return { ok: true as const, transactions: data ?? [] };
+}
+
+export async function listSmsLogs() {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  const service = createServiceClient();
+  const { data } = await service
+    .from('sms_logs')
+    .select('id, template, phone, ok, error, created_at')
+    .order('created_at', { ascending: false })
+    .limit(20);
+  return { ok: true as const, logs: data ?? [] };
+}
+
+export async function sendTestSms(phone: string, message: string, ctx: AdminChatCtx) {
+  if (!phone?.trim() || !message?.trim()) return { ok: false as const, error: 'phone and message required' };
+  const result = await smsTest({ phone: phone.trim(), message: message.trim().slice(0, 320), triggeredBy: ctx.adminUserId });
+  return result;
+}
+
+export async function getPlatformSettings() {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  const [config, service] = await Promise.all([getPlatformConfig(), Promise.resolve(createServiceClient())]);
+  const { data: settings } = await service.from('settings').select('price_per_gb, referrals_enabled').eq('id', 1).maybeSingle();
+  return {
+    ok: true as const,
+    price_per_gb: settings?.price_per_gb ?? 6,
+    referrals_enabled: settings?.referrals_enabled ?? false,
+    contact: config.contact,
+    supplierRouting: config.supplierRouting,
+    referral_reward_ghs: config.referralRewardGhs,
+  };
+}
+
+export async function updateCustomerRole(userId: string, role: string) {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  const allowed = ['user', 'admin', 'agent'];
+  if (!allowed.includes(role)) return { ok: false as const, error: 'Invalid role' };
+  const service = createServiceClient();
+  const { error } = await service.from('profiles').update({ role }).eq('id', userId);
+  if (error) return { ok: false as const, error: error.message };
+  return { ok: true as const, userId, role };
+}
+
+export async function listPromotions() {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  const service = createServiceClient();
+  const { data } = await service.from('promotions').select('*').order('created_at', { ascending: false }).limit(20);
+  return { ok: true as const, promotions: data ?? [] };
+}
+
+export async function pollSupplierOrderStatus(identifier: string) {
+  if (!hasSupabaseAdminConfig()) return notConfigured();
+  if (!identifier?.trim()) return { ok: false as const, error: 'Order reference required' };
+  const result = await pollOrderStatus(identifier.trim());
+  if (!result.ok) return { ok: false as const, error: result.error };
+  return { ok: true as const, status: result.data };
+}
+
+export async function creditCustomerWallet(userId: string, amount: number, note?: string) {
+  if (amount <= 0) return { ok: false as const, error: 'Use positive amount to credit' };
+  const result = await adjustCustomerWallet(userId, amount);
+  if (!result.ok) return result;
+  return { ...result, note: note ?? 'Admin credit' };
 }

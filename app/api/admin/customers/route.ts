@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { assertAdminApi } from '@/lib/auth/admin-api';
 import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admin';
+import { sanitizeIlikeTerm } from '@/lib/security/sanitize';
 
 const ROLES = ['user', 'admin', 'agent'];
 
@@ -20,7 +21,8 @@ export async function GET(request: Request) {
     .limit(200);
 
   if (search) {
-    query = query.or(`email.ilike.%${search}%,phone.ilike.%${search}%,name.ilike.%${search}%`);
+    const s = sanitizeIlikeTerm(search);
+    if (s) query = query.or(`email.ilike.%${s}%,phone.ilike.%${s}%,name.ilike.%${s}%`);
   }
 
   const { data, error } = await query;

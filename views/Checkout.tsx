@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bundle, Network, User, PaymentStatus } from '../types';
 import { createOrder } from '../services/supabaseDatabase';
+import { supabase } from '../services/supabaseClient';
 import { getCheckoutState } from '@/lib/navigationState';
 import { Loader2, Smartphone, CreditCard, Wallet, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -102,11 +103,23 @@ export const Checkout: React.FC<CheckoutProps> = ({ user }) => {
       }
 
       const order = await createOrder(orderUser, network, bundle.size, phone, 'wallet', PaymentStatus.PAID);
-      await fetch('/api/orders/dispatch', {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Please sign in again');
+
+      const dispatchRes = await fetch('/api/orders/dispatch', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({ orderId: order.id }),
       });
+      if (!dispatchRes.ok) {
+        const d = await dispatchRes.json().catch(() => ({}));
+        throw new Error(d.error || 'Could not dispatch order');
+      }
       router.push('/success');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Payment failed.');

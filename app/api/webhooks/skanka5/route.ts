@@ -5,7 +5,8 @@ import { markOrderFulfilledByReference } from '@/lib/suppliers/dispatch-order';
 export async function POST(request: Request) {
   const rawBody = await request.text();
   const signature = request.headers.get('x-skanka5-signature');
-  const allowUnsigned = process.env.SKANKA5_ALLOW_UNSIGNED_WEBHOOKS === '1';
+  const allowUnsigned =
+    process.env.NODE_ENV !== 'production' && process.env.SKANKA5_ALLOW_UNSIGNED_WEBHOOKS === '1';
   const signatureValid = verifyWebhookSignature(rawBody, signature);
 
   if (!signatureValid && !allowUnsigned) {

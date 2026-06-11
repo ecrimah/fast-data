@@ -12,7 +12,7 @@ interface WalletProps {
   refreshUser: () => void;
 }
 
-export const Wallet: React.FC<WalletProps> = ({ user, refreshUser }) => {
+export const Wallet: React.FC<WalletProps> = ({ user }) => {
   const router = useRouter();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
@@ -55,7 +55,7 @@ export const Wallet: React.FC<WalletProps> = ({ user, refreshUser }) => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Top-up failed');
 
-      refreshUser();
+      alert(data.message || 'Top-up request submitted. Pay via MoMo — admin will credit your wallet after confirmation.');
       fetchTx();
       setIsTopUpOpen(false);
       setAmount('');

@@ -39,20 +39,17 @@ export async function POST(request: Request) {
 
   if (pErr || !profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
 
-  const newBalance = Number(profile.wallet_balance ?? 0) + amount;
-  const ref = `TOP-${Date.now()}`;
+  if (amount > 500) {
+    return NextResponse.json({ error: 'Maximum top-up request is GH₵500' }, { status: 400 });
+  }
 
-  const { error: uErr } = await service
-    .from('profiles')
-    .update({ wallet_balance: newBalance })
-    .eq('id', user.id);
-  if (uErr) return NextResponse.json({ error: uErr.message }, { status: 400 });
+  const ref = `TOP-REQ-${Date.now()}`;
 
   await service.from('transactions').insert({
     user_id: user.id,
     type: 'topup',
     amount,
-    status: 'completed',
+    status: 'pending',
     reference: ref,
   });
 
@@ -64,5 +61,11 @@ export async function POST(request: Request) {
     triggeredBy: user.id,
   }).catch(console.error);
 
-  return NextResponse.json({ ok: true, wallet_balance: newBalance, reference: ref });
+  return NextResponse.json({
+    ok: true,
+    pending: true,
+    message: 'Top-up request sent. Pay via MoMo and your wallet will be credited after admin confirmation.',
+    reference: ref,
+    wallet_balance: Number(profile.wallet_balance ?? 0),
+  });
 }
