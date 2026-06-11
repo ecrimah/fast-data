@@ -153,7 +153,7 @@ export function HeroSection() {
               <button
                 type="button"
                 onClick={scrollToShop}
-                className="group inline-flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-bold text-white gradient-accent shadow-lg shadow-gold/30 sm:w-auto"
+                className="group pop-hover inline-flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-bold text-white gradient-accent shadow-lg shadow-gold/30 sm:w-auto"
               >
                 Browse bundles
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
@@ -220,19 +220,22 @@ export function HeroSection() {
         </div>
 
         <div className="mt-6 grid grid-cols-2 gap-4 border-t border-white/10 pt-5 sm:grid-cols-4 sm:gap-6">
-          <Metric label="Networks" value="3" />
-          <Metric label="Avg delivery" value="< 2 min" />
-          <Metric label="Bundle types" value="15+" />
-          <Metric label="AI assistant" value="Tay" />
+          <Metric label="Networks" value="3" delay={0} />
+          <Metric label="Avg delivery" value="< 2 min" delay={80} />
+          <Metric label="Bundle types" value="15+" delay={160} />
+          <Metric label="AI assistant" value="Tay" delay={240} />
         </div>
       </div>
     </section>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value, delay = 0 }: { label: string; value: string; delay?: number }) {
   return (
-    <div className="min-w-0 text-center sm:text-left">
+    <div
+      className="min-w-0 text-center sm:text-left animate-fade-in-up"
+      style={{ animationDelay: `${delay}ms`, animationFillMode: 'both' }}
+    >
       <p className="num text-lg font-extrabold leading-none text-white sm:text-xl">{value}</p>
       <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400 sm:text-[10px]">
         {label}

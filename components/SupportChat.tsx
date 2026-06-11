@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { MessageCircle, Send, X, Bot, Loader2, CreditCard, Package } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
+import { cn } from '@/lib/utils';
 
 type ChatAction =
   | { type: 'payment_link'; paymentUrl: string; paymentRef: string; label: string }
@@ -44,6 +45,15 @@ export const SupportChat: React.FC = () => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, isOpen, loading]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     const openChat = () => setIsOpen(true);
@@ -114,14 +124,17 @@ export const SupportChat: React.FC = () => {
     sendMessage(input);
   };
 
+  const closeChat = () => setIsOpen(false);
+
   return (
     <>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-4 right-4 z-50 rounded-full p-4 shadow-lg transition-all duration-300 sm:bottom-6 sm:right-6 ${
-          isOpen ? 'bg-red-600' : 'gradient-accent shadow-gold/30'
-        }`}
+        className={cn(
+          'fixed bottom-4 right-4 z-50 rounded-full p-4 shadow-lg transition-all duration-300 sm:bottom-6 sm:right-6',
+          isOpen ? 'max-sm:hidden bg-red-600' : 'gradient-accent shadow-gold/30 animate-pop-in'
+        )}
         aria-label={isOpen ? 'Close chat' : 'Open chat'}
       >
         {isOpen ? <X className="text-white" /> : <MessageCircle className="text-white" />}
@@ -129,11 +142,13 @@ export const SupportChat: React.FC = () => {
 
       {isOpen && (
         <div
-          className="fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-2xl animate-fade-in-up
-            inset-x-4 bottom-[5.5rem] max-h-[min(560px,calc(100dvh-6.5rem))]
-            sm:inset-x-auto sm:right-6 sm:bottom-24 sm:w-[22rem] md:w-96"
+          className={cn(
+            'fixed z-[70] flex flex-col overflow-hidden bg-white shadow-2xl',
+            'inset-0 animate-chat-slide-up',
+            'sm:inset-auto sm:right-6 sm:bottom-24 sm:left-auto sm:top-auto sm:h-[min(560px,calc(100dvh-8rem))] sm:w-[22rem] sm:max-h-none sm:rounded-2xl sm:border sm:border-border sm:animate-pop-in md:w-96'
+          )}
         >
-          <div className="flex shrink-0 items-center gap-3 bg-royal p-4">
+          <div className="flex shrink-0 items-center gap-3 bg-royal px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] sm:p-4">
             <div className="rounded-full bg-white/20 p-2">
               <Bot className="text-white" size={20} />
             </div>
@@ -145,18 +160,22 @@ export const SupportChat: React.FC = () => {
             </div>
             <button
               type="button"
-              onClick={() => setIsOpen(false)}
-              className="rounded-lg p-1.5 text-white/80 hover:bg-white/10 sm:hidden"
-              aria-label="Close"
+              onClick={closeChat}
+              className="rounded-lg p-2 text-white/80 hover:bg-white/10"
+              aria-label="Close chat"
             >
-              <X size={18} />
+              <X size={20} />
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4">
+          <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 overscroll-contain">
             <div className="flex flex-col gap-3">
               {messages.map((msg, idx) => (
-                <div key={idx}>
+                <div
+                  key={idx}
+                  className="animate-fade-in-up"
+                  style={{ animationDelay: `${Math.min(idx * 40, 200)}ms`, animationFillMode: 'both' }}
+                >
                   <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div
                       className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
@@ -220,7 +239,7 @@ export const SupportChat: React.FC = () => {
                   key={q}
                   type="button"
                   onClick={() => sendMessage(q)}
-                  className="shrink-0 rounded-full border border-border bg-slate-50 px-3 py-1 text-[11px] font-semibold text-royal hover:border-gold/40"
+                  className="shrink-0 rounded-full border border-border bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-royal transition hover:border-gold/40 hover:bg-gold/5 active:scale-95"
                 >
                   {q}
                 </button>
@@ -228,18 +247,21 @@ export const SupportChat: React.FC = () => {
             </div>
           )}
 
-          <form onSubmit={handleSend} className="flex shrink-0 gap-2 border-t border-border bg-white p-3">
+          <form
+            onSubmit={handleSend}
+            className="flex shrink-0 gap-2 border-t border-border bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+          >
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask Tay — buy data, track order..."
-              className="min-w-0 flex-1 rounded-full border border-border bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-gold focus:ring-2 focus:ring-gold/30"
+              className="min-w-0 flex-1 rounded-full border border-border bg-slate-50 px-4 py-3 text-base outline-none focus:border-gold focus:ring-2 focus:ring-gold/30 sm:py-2.5 sm:text-sm"
             />
             <button
               type="submit"
               disabled={loading || !input.trim()}
-              className="shrink-0 rounded-full gradient-accent p-2.5 text-white disabled:opacity-50"
+              className="shrink-0 rounded-full gradient-accent p-3 text-white disabled:opacity-50 active:scale-95 sm:p-2.5"
               aria-label="Send"
             >
               <Send size={18} />

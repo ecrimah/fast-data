@@ -5,6 +5,7 @@ import { ChevronDown } from 'lucide-react';
 import { FaqJsonLd } from '@/components/seo/JsonLd';
 import { FAQS } from '@/lib/faqs';
 import { cn } from '@/lib/utils';
+import { ScrollReveal } from '@/components/ui/ScrollReveal';
 
 export function FaqSection() {
   const [open, setOpen] = useState<number | null>(0);
@@ -13,23 +14,25 @@ export function FaqSection() {
   return (
     <section className="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8" aria-labelledby="faq-heading">
       <FaqJsonLd faqs={faqs} />
-      <div className="text-center">
-        <span className="eyebrow text-gold-dark">Questions &amp; answers</span>
-        <h2 id="faq-heading" className="display-2 mt-2 text-royal">
-          Frequently asked questions
-        </h2>
-        <p className="mt-2 text-sm text-muted">
-          Everything you need to know about buying data bundles in Ghana.
-        </p>
-      </div>
+      <ScrollReveal variant="up">
+        <div className="text-center">
+          <span className="eyebrow text-gold-dark">Questions &amp; answers</span>
+          <h2 id="faq-heading" className="display-2 mt-2 text-royal">
+            Frequently asked questions
+          </h2>
+          <p className="mt-2 text-sm text-muted">
+            Everything you need to know about buying data bundles in Ghana.
+          </p>
+        </div>
+      </ScrollReveal>
 
       <div className="mt-8 space-y-3">
         {faqs.map((faq, i) => {
           const isOpen = open === i;
           return (
+            <ScrollReveal key={faq.q} variant="up" delay={i * 60}>
             <div
-              key={faq.q}
-              className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+              className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md"
             >
               <button
                 type="button"
@@ -56,6 +59,7 @@ export function FaqSection() {
                 </div>
               </div>
             </div>
+            </ScrollReveal>
           );
         })}
       </div>

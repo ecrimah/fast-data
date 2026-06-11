@@ -20,6 +20,11 @@ export const metadata: Metadata = {
   },
   description: SITE.description,
   applicationName: SITE.name,
+  appleWebApp: {
+    capable: true,
+    title: SITE.shortName,
+    statusBarStyle: 'black-translucent',
+  },
   keywords: [...SITE.keywords],
   authors: [{ name: SITE.name, url: SITE.url }],
   creator: SITE.name,

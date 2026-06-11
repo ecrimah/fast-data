@@ -6,6 +6,7 @@ import { UserProvider, useUser } from '@/contexts/UserContext';
 import { Layout } from '@/components/Layout';
 import { SupportChat } from '@/components/SupportChat';
 import { AdminChat } from '@/components/admin/AdminChat';
+import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 
 function AppShellInner({ children }: { children: ReactNode }) {
   const { user, loading, handleLogout } = useUser();
@@ -34,6 +35,7 @@ function AppShellInner({ children }: { children: ReactNode }) {
     return (
       <>
         {children}
+        <PwaInstallPrompt />
         <SupportChat />
       </>
     );
@@ -44,6 +46,7 @@ function AppShellInner({ children }: { children: ReactNode }) {
       <Layout user={user} onLogout={handleLogout}>
         {children}
       </Layout>
+      <PwaInstallPrompt />
       <SupportChat />
     </>
   );

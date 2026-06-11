@@ -1,4 +1,7 @@
+'use client';
+
 import { MousePointerClick, Wallet, Zap, Bot } from 'lucide-react';
+import { ScrollReveal } from '@/components/ui/ScrollReveal';
 
 const STEPS = [
   {
@@ -31,30 +34,34 @@ export function HowItWorks() {
   return (
     <section className="bg-white px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
       <div className="mx-auto max-w-7xl">
-        <div className="max-w-xl">
-          <span className="eyebrow text-gold-dark">How it works</span>
-          <h2 className="display-2 mt-2 text-[#111]">
-            From tap to data on your line — fast and simple.
-          </h2>
-          <p className="mt-2 text-sm text-muted">
-            No USSD codes, no waiting on hold. Buy directly or let Tay handle it for you.
-          </p>
-        </div>
+        <ScrollReveal variant="up">
+          <div className="max-w-xl">
+            <span className="eyebrow text-gold-dark">How it works</span>
+            <h2 className="display-2 mt-2 text-[#111]">
+              From tap to data on your line — fast and simple.
+            </h2>
+            <p className="mt-2 text-sm text-muted">
+              No USSD codes, no waiting on hold. Buy directly or let Tay handle it for you.
+            </p>
+          </div>
+        </ScrollReveal>
 
         <ol className="mt-8 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          {STEPS.map((step) => (
-            <li key={step.num} className="card-elevated card-lift relative overflow-hidden p-4">
-              <span className="num absolute right-3 top-3 text-3xl font-extrabold tracking-tighter text-slate-100">
-                {step.num}
-              </span>
-              <div className="relative">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg gradient-accent text-white shadow shadow-gold/25">
-                  <step.icon className="h-4 w-4" />
+          {STEPS.map((step, i) => (
+            <ScrollReveal key={step.num} as="li" variant="up" delay={i * 90}>
+              <div className="card-elevated card-lift pop-hover relative h-full overflow-hidden p-4">
+                <span className="num absolute right-3 top-3 text-3xl font-extrabold tracking-tighter text-slate-100">
+                  {step.num}
+                </span>
+                <div className="relative">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg gradient-accent text-white shadow shadow-gold/25">
+                    <step.icon className="h-4 w-4" />
+                  </div>
+                  <h3 className="mt-3 text-sm font-bold text-[#111]">{step.title}</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-muted">{step.desc}</p>
                 </div>
-                <h3 className="mt-3 text-sm font-bold text-[#111]">{step.title}</h3>
-                <p className="mt-1 text-xs leading-relaxed text-muted">{step.desc}</p>
               </div>
-            </li>
+            </ScrollReveal>
           ))}
         </ol>
       </div>

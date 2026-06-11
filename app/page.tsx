@@ -7,19 +7,24 @@ import { FaqSection } from '@/components/home/FaqSection';
 import { FinalCta } from '@/components/home/FinalCta';
 import { WhatsAppCommunitySection } from '@/components/home/WhatsAppCommunitySection';
 import { Shop } from '@/views/Shop';
+import { ScrollReveal } from '@/components/ui/ScrollReveal';
 
 export default function HomePage() {
   return (
     <>
       <HeroSection />
       <HowItWorks />
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <ScrollReveal variant="up" className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <Shop />
-      </div>
-      <WhatsAppCommunitySection />
+      </ScrollReveal>
+      <ScrollReveal variant="fade">
+        <WhatsAppCommunitySection />
+      </ScrollReveal>
       <NetworkCoverage />
       <FaqSection />
-      <FinalCta />
+      <ScrollReveal variant="scale">
+        <FinalCta />
+      </ScrollReveal>
     </>
   );
 }
