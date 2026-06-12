@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Search } from 'lucide-react';
 import { adminFetch } from '@/lib/api/admin-client';
 import { formatGHS } from '@/lib/admin-metrics';
@@ -12,7 +12,21 @@ import {
   NexusPill,
   NexusTable,
   StatOrb,
+  EmptyNexus,
 } from '@/components/admin/fds-ui';
+
+type Order = {
+  id: string;
+  payment_ref: string;
+  phone: string;
+  network: string;
+  bundle_size: string;
+  amount: number;
+  payment_status: string;
+  delivery_status: string;
+  supplier?: string | null;
+  supplier_status?: string | null;
+};
 
 const FILTERS = [
   { id: 'all', label: 'All' },
@@ -23,8 +37,80 @@ const FILTERS = [
   { id: 'delivered', label: 'Delivered' },
 ];
 
+function OrderTable({
+  orders,
+  selected,
+  onToggle,
+  onFulfill,
+  showDeliver = true,
+}: {
+  orders: Order[];
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+  onFulfill: (id: string) => void;
+  showDeliver?: boolean;
+}) {
+  if (!orders.length) {
+    return <EmptyNexus title="Nothing here" description="No orders in this section." />;
+  }
+
+  return (
+    <NexusTable>
+      <thead>
+        <tr>
+          <th />
+          <th>Reference</th>
+          <th>Bundle</th>
+          <th>Pay</th>
+          <th>Delivery</th>
+          <th>Supplier</th>
+          {showDeliver && <th>Action</th>}
+        </tr>
+      </thead>
+      <tbody>
+        {orders.map((o) => (
+          <tr key={o.id}>
+            <td>
+              <input type="checkbox" checked={selected.has(o.id)} onChange={() => onToggle(o.id)} />
+            </td>
+            <td>
+              <p className="font-bold text-gold-glow">{o.payment_ref}</p>
+              <p className="font-mono text-[10px] text-white/40">{o.phone}</p>
+            </td>
+            <td>
+              {o.network} · {o.bundle_size}
+              <p className="font-bold tabular-nums">{formatGHS(o.amount)}</p>
+            </td>
+            <td>
+              <NexusPill tone={o.payment_status === 'paid' ? 'success' : o.payment_status === 'pending' ? 'warn' : 'danger'}>
+                {o.payment_status}
+              </NexusPill>
+            </td>
+            <td>
+              <NexusPill tone={o.delivery_status === 'delivered' ? 'success' : 'warn'}>{o.delivery_status}</NexusPill>
+            </td>
+            <td className="text-xs">
+              {o.supplier || '—'}
+              <p className="text-white/40">{o.supplier_status || '—'}</p>
+            </td>
+            {showDeliver && (
+              <td>
+                {o.payment_status === 'paid' && o.delivery_status !== 'delivered' && (
+                  <NexusBtn variant="gold" className="text-xs" onClick={() => onFulfill(o.id)}>
+                    Deliver
+                  </NexusBtn>
+                )}
+              </td>
+            )}
+          </tr>
+        ))}
+      </tbody>
+    </NexusTable>
+  );
+}
+
 export default function AdminOrdersPage() {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [filter, setFilter] = useState('all');
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -40,6 +126,13 @@ export default function AdminOrdersPage() {
   useEffect(() => {
     load();
   }, [filter]);
+
+  const split = useMemo(() => {
+    const pending = orders.filter((o) => o.payment_status === 'pending');
+    const paid = orders.filter((o) => o.payment_status === 'paid');
+    const failed = orders.filter((o) => o.payment_status === 'failed');
+    return { pending, paid, failed };
+  }, [orders]);
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -81,12 +174,14 @@ export default function AdminOrdersPage() {
     a.click();
   };
 
+  const showSplit = filter === 'all';
+
   return (
     <NexusPage>
       <NexusHeader
         eyebrow="Order operations"
         title="Order pipeline"
-        description="Search, filter, bulk deliver, and export — full ops control."
+        description="Awaiting-payment and paid orders are kept in separate sections so nothing gets lost in the mix."
         actions={
           <>
             <NexusBtn variant="ghost" onClick={exportCsv}>
@@ -100,7 +195,14 @@ export default function AdminOrdersPage() {
       />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatOrb tone="sky" label="Showing" value={String(orders.length)} />
+        {showSplit ? (
+          <>
+            <StatOrb tone="rose" label="Awaiting pay" value={String(split.pending.length)} />
+            <StatOrb tone="emerald" label="Paid" value={String(split.paid.length)} />
+          </>
+        ) : (
+          <StatOrb tone="sky" label="Showing" value={String(orders.length)} />
+        )}
         <StatOrb tone="gold" label="Selected" value={String(selected.size)} />
       </div>
 
@@ -137,56 +239,52 @@ export default function AdminOrdersPage() {
 
         {loading ? (
           <p className="py-8 text-center text-sm text-white/40">Loading orders…</p>
+        ) : showSplit ? (
+          <div className="space-y-8">
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <h3 className="font-bold text-white">Awaiting payment</h3>
+                <NexusPill tone={split.pending.length ? 'warn' : 'neutral'}>{split.pending.length}</NexusPill>
+              </div>
+              <p className="mb-3 text-xs text-white/45">
+                Checkout started but MoMo not completed — safe to ignore or clean up.
+              </p>
+              <OrderTable
+                orders={split.pending}
+                selected={selected}
+                onToggle={toggle}
+                onFulfill={fulfillOne}
+                showDeliver={false}
+              />
+            </section>
+
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <h3 className="font-bold text-white">Paid orders</h3>
+                <NexusPill tone={split.paid.length ? 'success' : 'neutral'}>{split.paid.length}</NexusPill>
+              </div>
+              <p className="mb-3 text-xs text-white/45">Confirmed payments — deliver, track supplier, or export.</p>
+              <OrderTable orders={split.paid} selected={selected} onToggle={toggle} onFulfill={fulfillOne} />
+            </section>
+
+            {split.failed.length > 0 && (
+              <section>
+                <div className="mb-3 flex items-center gap-2">
+                  <h3 className="font-bold text-white">Failed payments</h3>
+                  <NexusPill tone="danger">{split.failed.length}</NexusPill>
+                </div>
+                <OrderTable
+                  orders={split.failed}
+                  selected={selected}
+                  onToggle={toggle}
+                  onFulfill={fulfillOne}
+                  showDeliver={false}
+                />
+              </section>
+            )}
+          </div>
         ) : (
-          <NexusTable>
-            <thead>
-              <tr>
-                <th />
-                <th>Reference</th>
-                <th>Bundle</th>
-                <th>Pay</th>
-                <th>Delivery</th>
-                <th>Supplier</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((o) => (
-                <tr key={o.id}>
-                  <td>
-                    <input type="checkbox" checked={selected.has(o.id)} onChange={() => toggle(o.id)} />
-                  </td>
-                  <td>
-                    <p className="font-bold text-gold-glow">{o.payment_ref}</p>
-                    <p className="font-mono text-[10px] text-white/40">{o.phone}</p>
-                  </td>
-                  <td>
-                    {o.network} · {o.bundle_size}
-                    <p className="font-bold tabular-nums">{formatGHS(o.amount)}</p>
-                  </td>
-                  <td>
-                    <NexusPill tone={o.payment_status === 'paid' ? 'success' : o.payment_status === 'pending' ? 'warn' : 'danger'}>
-                      {o.payment_status}
-                    </NexusPill>
-                  </td>
-                  <td>
-                    <NexusPill tone={o.delivery_status === 'delivered' ? 'success' : 'warn'}>{o.delivery_status}</NexusPill>
-                  </td>
-                  <td className="text-xs">
-                    {o.supplier || '—'}
-                    <p className="text-white/40">{o.supplier_status || '—'}</p>
-                  </td>
-                  <td>
-                    {o.payment_status === 'paid' && o.delivery_status !== 'delivered' && (
-                      <NexusBtn variant="gold" className="text-xs" onClick={() => fulfillOne(o.id)}>
-                        Deliver
-                      </NexusBtn>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </NexusTable>
+          <OrderTable orders={orders} selected={selected} onToggle={toggle} onFulfill={fulfillOne} />
         )}
       </GlassPanel>
     </NexusPage>
