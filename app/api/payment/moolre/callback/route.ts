@@ -58,7 +58,8 @@ export async function POST(req: Request) {
     const orderId = metadata.order_id as string | undefined;
 
     const apiOk = body.status === 1 || body.status === '1';
-    const txOk = data.txtstatus === 1 || data.txtstatus === '1';
+    const txstatus = data.txstatus ?? data.txtstatus;
+    const txOk = txstatus === 1 || txstatus === '1';
     const messageStr = String(body.message || '').toLowerCase();
     const isSuccess = (apiOk || txOk) && !messageStr.includes('fail') && !messageStr.includes('error');
 

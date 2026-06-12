@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admin';
+import { checkMoolrePaymentStatus } from '@/lib/moolre-status';
 import { completePaidOrder } from '@/services/payment/complete-order';
 
 export async function POST(req: Request) {
@@ -17,7 +18,7 @@ export async function POST(req: Request) {
     const supabase = createServiceClient();
     const { data: order } = await supabase
       .from('orders')
-      .select('id, payment_ref, amount, payment_status')
+      .select('id, payment_ref, amount, payment_status, moolre_external_ref')
       .eq('payment_ref', paymentRef)
       .maybeSingle();
 
@@ -29,29 +30,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, payment_status: 'paid' });
     }
 
-    if (!process.env.MOOLRE_API_USER || !process.env.MOOLRE_API_PUBKEY) {
-      return NextResponse.json({ success: false, message: 'Moolre not configured' }, { status: 503 });
+    const externalRef = order.moolre_external_ref as string | null;
+    if (!externalRef) {
+      return NextResponse.json({
+        success: false,
+        payment_status: order.payment_status,
+        message: 'No Moolre payment reference stored for this order yet.',
+      });
     }
 
-    const checkResponse = await fetch('https://api.moolre.com/embed/status', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-USER': process.env.MOOLRE_API_USER,
-        'X-API-PUBKEY': process.env.MOOLRE_API_PUBKEY,
-      },
-      body: JSON.stringify({ externalref: paymentRef }),
-    });
+    const status = await checkMoolrePaymentStatus(externalRef);
+    if (status.error) {
+      return NextResponse.json({ success: false, message: status.error }, { status: 503 });
+    }
 
-    const checkResult = await checkResponse.json();
-    const statusStr = String(checkResult.data?.status || '').toLowerCase();
-    const verified =
-      checkResult.status === 1 &&
-      checkResult.data &&
-      ['success', 'successful', 'completed', 'paid'].includes(statusStr);
-
-    if (!verified) {
-      return NextResponse.json({ success: false, payment_status: order.payment_status });
+    if (!status.paid) {
+      return NextResponse.json({
+        success: false,
+        payment_status: order.payment_status,
+        message: status.notFound ? 'Payment not found on Moolre yet' : 'Payment still pending on Moolre',
+      });
     }
 
     await completePaidOrder(order.id);

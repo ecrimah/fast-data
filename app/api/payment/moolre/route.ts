@@ -39,6 +39,8 @@ export async function POST(req: Request) {
     const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || requestUrl.origin).replace(/\/+$/, '');
     const uniqueRef = `${orderRef}-R${Date.now()}`;
 
+    await supabase.from('orders').update({ moolre_external_ref: uniqueRef }).eq('id', order.id);
+
     const payload = {
       type: 1,
       amount: amount.toString(),

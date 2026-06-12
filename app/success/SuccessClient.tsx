@@ -39,9 +39,9 @@ export default function SuccessClient() {
       }
 
       if (cancelled) return;
-      // Retry a few times (the callback may land a moment after redirect).
-      if (attempts < 5) {
-        setTimeout(check, 3000);
+      // Retry — callback may lag, or we poll Moolre directly after redirect.
+      if (attempts < 15) {
+        setTimeout(check, 4000);
       } else {
         setState('pending');
       }

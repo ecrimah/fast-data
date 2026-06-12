@@ -31,6 +31,8 @@ export async function initMoolrePayment(args: {
   const baseUrl = args.baseUrl.replace(/\/+$/, '');
   const uniqueRef = `${order.payment_ref}-R${Date.now()}`;
 
+  await supabase.from('orders').update({ moolre_external_ref: uniqueRef }).eq('id', order.id);
+
   const payload = {
     type: 1,
     amount: String(order.amount),
