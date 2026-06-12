@@ -42,13 +42,17 @@ function OrderTable({
   selected,
   onToggle,
   onFulfill,
+  onDelete,
   showDeliver = true,
+  showDelete = false,
 }: {
   orders: Order[];
   selected: Set<string>;
   onToggle: (id: string) => void;
   onFulfill: (id: string) => void;
+  onDelete?: (id: string) => void;
   showDeliver?: boolean;
+  showDelete?: boolean;
 }) {
   if (!orders.length) {
     return <EmptyNexus title="Nothing here" description="No orders in this section." />;
@@ -65,6 +69,7 @@ function OrderTable({
           <th>Delivery</th>
           <th>Supplier</th>
           {showDeliver && <th>Action</th>}
+          {showDelete && <th>Action</th>}
         </tr>
       </thead>
       <tbody>
@@ -100,6 +105,13 @@ function OrderTable({
                     Deliver
                   </NexusBtn>
                 )}
+              </td>
+            )}
+            {showDelete && onDelete && (
+              <td>
+                <NexusBtn variant="danger" className="!px-2 !py-1 text-xs" onClick={() => onDelete(o.id)}>
+                  Delete
+                </NexusBtn>
               </td>
             )}
           </tr>
@@ -157,6 +169,45 @@ export default function AdminOrdersPage() {
     await adminFetch(`/api/admin/orders/${id}/fulfill`, { method: 'PATCH' });
     load();
   };
+
+  const deleteOne = async (id: string) => {
+    if (!confirm('Remove this unpaid order from the list?')) return;
+    try {
+      await adminFetch(`/api/admin/orders/${id}`, { method: 'DELETE' });
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Could not delete');
+    }
+  };
+
+  const bulkDeletePending = async () => {
+    const pendingIds = [...selected].filter((id) => {
+      const o = orders.find((x) => x.id === id);
+      return o && (o.payment_status === 'pending' || o.payment_status === 'failed');
+    });
+    if (!pendingIds.length) return;
+    if (!confirm(`Delete ${pendingIds.length} unpaid order(s)?`)) return;
+    try {
+      await adminFetch('/api/admin/orders/bulk', {
+        method: 'DELETE',
+        body: JSON.stringify({ orderIds: pendingIds }),
+      });
+      setSelected(new Set());
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Could not delete');
+    }
+  };
+
+  const selectedPendingCount = [...selected].filter((id) => {
+    const o = orders.find((x) => x.id === id);
+    return o && (o.payment_status === 'pending' || o.payment_status === 'failed');
+  }).length;
 
   const exportCsv = () => {
     const header = 'ref,network,bundle,phone,amount,payment,delivery,supplier\n';
@@ -242,9 +293,15 @@ export default function AdminOrdersPage() {
         ) : showSplit ? (
           <div className="space-y-8">
             <section>
-              <div className="mb-3 flex items-center gap-2">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
                 <h3 className="font-bold text-white">Awaiting payment</h3>
                 <NexusPill tone={split.pending.length ? 'warn' : 'neutral'}>{split.pending.length}</NexusPill>
+                <div className="flex-1" />
+                {selectedPendingCount > 0 && (
+                  <NexusBtn variant="danger" className="!py-1.5 !text-xs" onClick={bulkDeletePending}>
+                    Delete selected ({selectedPendingCount})
+                  </NexusBtn>
+                )}
               </div>
               <p className="mb-3 text-xs text-white/45">
                 Checkout started but MoMo not completed — safe to ignore or clean up.
@@ -254,7 +311,9 @@ export default function AdminOrdersPage() {
                 selected={selected}
                 onToggle={toggle}
                 onFulfill={fulfillOne}
+                onDelete={deleteOne}
                 showDeliver={false}
+                showDelete
               />
             </section>
 
@@ -278,11 +337,23 @@ export default function AdminOrdersPage() {
                   selected={selected}
                   onToggle={toggle}
                   onFulfill={fulfillOne}
+                  onDelete={deleteOne}
                   showDeliver={false}
+                  showDelete
                 />
               </section>
             )}
           </div>
+        ) : filter === 'pending_payment' ? (
+          <OrderTable
+            orders={orders}
+            selected={selected}
+            onToggle={toggle}
+            onFulfill={fulfillOne}
+            onDelete={deleteOne}
+            showDeliver={false}
+            showDelete
+          />
         ) : (
           <OrderTable orders={orders} selected={selected} onToggle={toggle} onFulfill={fulfillOne} />
         )}
