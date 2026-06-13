@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admin';
-import { checkMoolrePaymentStatus } from '@/lib/moolre-status';
+import { checkMoolrePaymentStatus, discoverPaidExternalRef } from '@/lib/moolre-status';
 import { completePaidOrder } from '@/services/payment/complete-order';
 
 export async function POST(req: Request) {
@@ -30,12 +30,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, payment_status: 'paid' });
     }
 
-    const externalRef = order.moolre_external_ref as string | null;
+    let externalRef = order.moolre_external_ref as string | null;
+    if (!externalRef) {
+      externalRef = await discoverPaidExternalRef(paymentRef);
+      if (externalRef) {
+        await supabase.from('orders').update({ moolre_external_ref: externalRef }).eq('id', order.id);
+      }
+    }
+
     if (!externalRef) {
       return NextResponse.json({
         success: false,
         payment_status: order.payment_status,
-        message: 'No Moolre payment reference stored for this order yet.',
+        message: 'Payment not found on Moolre yet',
       });
     }
 

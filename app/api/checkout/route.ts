@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admin';
 import { createChatOrder } from '@/lib/chat-tools';
 import { checkRateLimit, clientIp } from '@/lib/security/rate-limit';
+import { resolvePublicAppUrl } from '@/lib/moolre-app-url';
 
 type Body = {
   network?: string;
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
   }
 
   const requestUrl = new URL(request.url);
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || requestUrl.origin).replace(/\/+$/, '');
+  const baseUrl = resolvePublicAppUrl(requestUrl.origin);
 
   const result = await createChatOrder({
     network,

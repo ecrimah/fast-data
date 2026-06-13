@@ -10,7 +10,7 @@ export const BRAND = {
   royalMid: '#0d3a6e',
 } as const;
 
-const SITE_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://fastdataservices.store').replace(/\/$/, '');
+const SITE_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://www.fastdataservices.store').replace(/\/$/, '');
 
 export const SITE = {
   name: 'Fast Data Services',

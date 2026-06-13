@@ -1,6 +1,6 @@
 import 'server-only';
 import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admin';
-import { checkMoolrePaymentStatus } from '@/lib/moolre-status';
+import { checkMoolrePaymentStatus, discoverPaidExternalRef } from '@/lib/moolre-status';
 import { completePaidOrder } from '@/services/payment/complete-order';
 
 export type ReconcileResult = {
@@ -30,10 +30,13 @@ export async function reconcilePendingPayments(limit = 50): Promise<ReconcileRes
 
   const service = createServiceClient();
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const discoverSince = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  let discoverAttempts = 0;
+  const maxDiscover = 3;
 
   const { data: orders, error } = await service
     .from('orders')
-    .select('id, payment_ref, moolre_external_ref, amount, payment_status')
+    .select('id, payment_ref, moolre_external_ref, amount, payment_status, created_at')
     .eq('payment_status', 'pending')
     .eq('payment_method', 'moolre')
     .gte('created_at', since)
@@ -47,10 +50,21 @@ export async function reconcilePendingPayments(limit = 50): Promise<ReconcileRes
 
   for (const order of orders ?? []) {
     result.checked += 1;
-    const externalRef = order.moolre_external_ref as string | null;
+    let externalRef = order.moolre_external_ref as string | null;
+
     if (!externalRef) {
-      result.noRef += 1;
-      continue;
+      const recent = order.created_at >= discoverSince;
+      if (recent && discoverAttempts < maxDiscover) {
+        discoverAttempts += 1;
+        externalRef = await discoverPaidExternalRef(order.payment_ref);
+        if (externalRef) {
+          await service.from('orders').update({ moolre_external_ref: externalRef }).eq('id', order.id);
+        }
+      }
+      if (!externalRef) {
+        result.noRef += 1;
+        continue;
+      }
     }
 
     const status = await checkMoolrePaymentStatus(externalRef);

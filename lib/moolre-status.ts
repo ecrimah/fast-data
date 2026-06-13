@@ -47,3 +47,17 @@ export async function checkMoolrePaymentStatus(externalRef: string): Promise<Moo
     };
   }
 }
+
+/** When moolre_external_ref was not stored, scan likely refs (payment link created ~0–3 min after order). */
+export async function discoverPaidExternalRef(paymentRef: string): Promise<string | null> {
+  const ts = Number(paymentRef.replace(/^FDS-/, ''));
+  if (!Number.isFinite(ts)) return null;
+
+  for (let offset = 0; offset <= 180_000; offset += 1_000) {
+    const ref = `${paymentRef}-R${ts + offset}`;
+    const status = await checkMoolrePaymentStatus(ref);
+    if (status.paid) return ref;
+    if (status.error) return null;
+  }
+  return null;
+}

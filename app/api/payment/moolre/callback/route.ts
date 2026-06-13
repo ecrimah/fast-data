@@ -1,6 +1,21 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admin';
 import { completePaidOrder } from '@/services/payment/complete-order';
+import { resolvePublicAppUrl } from '@/lib/moolre-app-url';
+
+function parseMetadata(raw: unknown): Record<string, unknown> {
+  if (!raw) return {};
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, unknown>;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return typeof parsed === 'object' && parsed ? (parsed as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
 
 export async function POST(req: Request) {
   try {
@@ -54,7 +69,7 @@ export async function POST(req: Request) {
       data.externalref || data.external_reference || body.externalref || ''
     );
     const paymentRef = rawExternalRef.replace(/-R\d+$/, '');
-    const metadata = (data.metadata || body.metadata || {}) as Record<string, unknown>;
+    const metadata = parseMetadata(data.metadata ?? body.metadata);
     const orderId = metadata.order_id as string | undefined;
 
     const apiOk = body.status === 1 || body.status === '1';
@@ -113,6 +128,15 @@ export async function POST(req: Request) {
 
     await completePaidOrder(order.id);
 
+    // Mark the inbound event as matched when possible.
+    const txId = String(data.transactionid || data.transaction_id || '');
+    if (txId) {
+      await supabase
+        .from('payment_events')
+        .update({ matched_order_id: order.id, matched_at: new Date().toISOString(), parse_status: 'parsed' })
+        .eq('transaction_id', txId);
+    }
+
     return NextResponse.json({ success: true, message: 'Payment verified' });
   } catch (error) {
     console.error('[Moolre callback]', error);
@@ -121,5 +145,8 @@ export async function POST(req: Request) {
 }
 
 export async function GET() {
-  return NextResponse.json({ message: 'Moolre callback ready' });
+  return NextResponse.json({
+    message: 'Moolre callback ready',
+    callbackUrl: resolvePublicAppUrl() + '/api/payment/moolre/callback',
+  });
 }

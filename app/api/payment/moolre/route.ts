@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admin';
+import { moolreCallbackUrl, moolreSuccessRedirectUrl, resolvePublicAppUrl } from '@/lib/moolre-app-url';
 
 export async function POST(req: Request) {
   try {
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
     const amount = Number(order.amount);
     const orderRef = order.payment_ref;
     const requestUrl = new URL(req.url);
-    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || requestUrl.origin).replace(/\/+$/, '');
+    const baseUrl = resolvePublicAppUrl(requestUrl.origin);
     const uniqueRef = `${orderRef}-R${Date.now()}`;
 
     await supabase.from('orders').update({ moolre_external_ref: uniqueRef }).eq('id', order.id);
@@ -46,8 +47,8 @@ export async function POST(req: Request) {
       amount: amount.toString(),
       email: process.env.MOOLRE_MERCHANT_EMAIL || customerEmail || 'payments@fastdataservices.com',
       externalref: uniqueRef,
-      callback: `${baseUrl}/api/payment/moolre/callback`,
-      redirect: `${baseUrl}/success?order=${encodeURIComponent(orderRef)}&payment_success=true`,
+      callback: moolreCallbackUrl(baseUrl),
+      redirect: moolreSuccessRedirectUrl(orderRef, baseUrl),
       reusable: '0',
       currency: 'GHS',
       accountnumber: process.env.MOOLRE_ACCOUNT_NUMBER,

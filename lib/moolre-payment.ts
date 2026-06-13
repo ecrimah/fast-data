@@ -1,4 +1,5 @@
 import { createServiceClient, hasSupabaseAdminConfig } from '@/lib/supabase-admin';
+import { moolreCallbackUrl, moolreSuccessRedirectUrl } from '@/lib/moolre-app-url';
 
 export async function initMoolrePayment(args: {
   orderId: string;
@@ -38,8 +39,8 @@ export async function initMoolrePayment(args: {
     amount: String(order.amount),
     email: process.env.MOOLRE_MERCHANT_EMAIL || args.customerEmail || 'payments@fastdataservices.com',
     externalref: uniqueRef,
-    callback: `${baseUrl}/api/payment/moolre/callback`,
-    redirect: `${baseUrl}/success?order=${encodeURIComponent(order.payment_ref)}&payment_success=true`,
+    callback: moolreCallbackUrl(baseUrl),
+    redirect: moolreSuccessRedirectUrl(order.payment_ref, baseUrl),
     reusable: '0',
     currency: 'GHS',
     accountnumber: process.env.MOOLRE_ACCOUNT_NUMBER,
