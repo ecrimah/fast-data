@@ -7,6 +7,7 @@ import { supabase } from '../services/supabaseClient';
 import { getCheckoutState } from '@/lib/navigationState';
 import { Loader2, Smartphone, CreditCard, Wallet, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { trackIntent } from '@/components/VisitorTracker';
 
 interface CheckoutProps {
   user: User | null;
@@ -28,10 +29,19 @@ export const Checkout: React.FC<CheckoutProps> = ({ user }) => {
   const [paymentMethod, setPaymentMethod] = useState<'moolre' | 'wallet'>('moolre');
 
   useEffect(() => {
-    setCheckoutState(getCheckoutState());
+    const state = getCheckoutState();
+    setCheckoutState(state);
     setPhone(user?.phone || '');
     setReady(true);
-  }, [user?.phone]);
+    if (state) {
+      trackIntent({
+        intent: 'checkout_started',
+        name: user?.name,
+        interestNetwork: state.network,
+        interestBundle: `${state.bundle.size} GB`,
+      });
+    }
+  }, [user?.phone, user?.name]);
 
   if (!ready) {
     return (
@@ -66,6 +76,14 @@ export const Checkout: React.FC<CheckoutProps> = ({ user }) => {
     }
 
     setLoading(true);
+    // Capture the lead (their number) the moment they commit to paying — even if they never finish.
+    trackIntent({
+      intent: 'checkout_started',
+      phone,
+      name: user?.name,
+      interestNetwork: network,
+      interestBundle: `${bundle.size} GB`,
+    });
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
@@ -195,6 +213,16 @@ export const Checkout: React.FC<CheckoutProps> = ({ user }) => {
           >
             {loading ? <Loader2 className="animate-spin" /> : 'Confirm & Pay'}
           </button>
+
+          {paymentMethod === 'moolre' && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+              <span className="font-bold">Tip:</span> a Mobile Money prompt will pop up on the paying number — enter
+              your PIN to approve. If no prompt appears, dial{' '}
+              <span className="font-mono font-bold">*170#</span> (MTN) or{' '}
+              <span className="font-mono font-bold">*110#</span> (Telecel / AT) and approve it under{' '}
+              <span className="font-semibold">My Approvals / Pending</span>.
+            </div>
+          )}
         </div>
       </div>
     </div>

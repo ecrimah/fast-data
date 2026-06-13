@@ -22,6 +22,7 @@ import {
   ListChecks,
   Package,
   Users,
+  UserPlus,
 } from 'lucide-react';
 import { useEffect, useState, ReactNode } from 'react';
 import { FdsLogo } from '@/components/brand/FdsLogo';
@@ -34,6 +35,7 @@ const NAV = [
   { href: '/admin/orders', label: 'Orders', icon: FileText },
   { href: '/admin/packages', label: 'Packages', icon: Package },
   { href: '/admin/customers', label: 'Customers', icon: Users },
+  { href: '/admin/leads', label: 'Leads', icon: UserPlus },
   { href: '/admin/suppliers', label: 'Suppliers', icon: Cable },
   { href: '/admin/momo', label: 'MoMo Match', icon: Smartphone },
   { href: '/admin/sms', label: 'SMS Hub', icon: MessageSquare },

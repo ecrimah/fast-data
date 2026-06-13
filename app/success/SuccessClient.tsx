@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle, Loader2, Clock } from 'lucide-react';
+import { trackIntent } from '@/components/VisitorTracker';
 
 type VerifyState = 'verifying' | 'paid' | 'pending';
 
@@ -32,6 +33,7 @@ export default function SuccessClient() {
 
         if (data?.success || data?.payment_status === 'paid') {
           setState('paid');
+          trackIntent({ intent: 'purchased' });
           return;
         }
       } catch {
@@ -84,6 +86,34 @@ export default function SuccessClient() {
         <p className="mt-4 flex items-center gap-2 text-sm text-muted">
           <Loader2 className="animate-spin" size={16} /> Verifying payment…
         </p>
+      )}
+
+      {!isPaid && (
+        <div className="mt-6 max-w-md rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left text-sm text-amber-900">
+          <p className="font-bold">Didn’t get the payment prompt?</p>
+          <p className="mt-1">
+            No problem — you can still approve the payment yourself from your phone:
+          </p>
+          <ul className="mt-2 space-y-1">
+            <li>
+              <span className="font-semibold">MTN MoMo:</span> dial <span className="font-mono font-bold">*170#</span> →
+              choose <span className="font-semibold">My Wallet</span> → <span className="font-semibold">My Approvals</span>,
+              or open the <span className="font-semibold">MyMTN / MoMo app</span> → Approvals.
+            </li>
+            <li>
+              <span className="font-semibold">Telecel Cash:</span> dial <span className="font-mono font-bold">*110#</span> →
+              <span className="font-semibold"> Approvals / Pending</span>.
+            </li>
+            <li>
+              <span className="font-semibold">AT Money:</span> dial <span className="font-mono font-bold">*110#</span> →
+              <span className="font-semibold"> Approvals</span>.
+            </li>
+          </ul>
+          <p className="mt-2 text-xs text-amber-800">
+            Approve the request, then this page will confirm automatically. Already approved? It usually clears within a
+            couple of minutes.
+          </p>
+        </div>
       )}
 
       <Link href="/" className="susu-btn-gold mt-8 inline-block">

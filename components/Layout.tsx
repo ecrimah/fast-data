@@ -130,6 +130,44 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
                 </Link>
               ))}
             </nav>
+
+            <div className="mt-4 border-t border-slate-200 pt-4">
+              {user ? (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <div>
+                    <p className="text-sm font-bold text-royal">{user.name.split(' ')[0]}</p>
+                    <p className="text-[11px] font-mono text-gold-dark">GH₵ {user.wallet_balance.toFixed(2)}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setOpen(false);
+                      onLogout();
+                    }}
+                    className="flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold text-red-500 hover:bg-red-50"
+                  >
+                    <LogOut size={15} />
+                    Sign out
+                  </button>
+                </div>
+              ) : (
+                <Link
+                  href="/login"
+                  onClick={() => setOpen(false)}
+                  className="flex w-full items-center justify-center rounded-full border border-slate-200 px-4 py-3 text-sm font-semibold text-royal hover:border-gold/40 hover:bg-slate-50"
+                >
+                  Sign in
+                </Link>
+              )}
+
+              <Link
+                href={isHome ? '#shop-bundles' : '/'}
+                onClick={() => setOpen(false)}
+                className="group mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-full px-4 py-3 text-sm font-bold text-white gradient-accent shadow-md shadow-gold/20"
+              >
+                Buy Data
+                <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            </div>
           </div>
         )}
       </header>
