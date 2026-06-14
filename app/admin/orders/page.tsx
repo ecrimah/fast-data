@@ -43,20 +43,26 @@ function OrderTable({
   onToggle,
   onFulfill,
   onDelete,
+  onApprove,
   showDeliver = true,
   showDelete = false,
+  showApprove = false,
 }: {
   orders: Order[];
   selected: Set<string>;
   onToggle: (id: string) => void;
   onFulfill: (id: string) => void;
   onDelete?: (id: string) => void;
+  onApprove?: (id: string) => void;
   showDeliver?: boolean;
   showDelete?: boolean;
+  showApprove?: boolean;
 }) {
   if (!orders.length) {
     return <EmptyNexus title="Nothing here" description="No orders in this section." />;
   }
+
+  const showActions = showDeliver || showDelete || showApprove;
 
   return (
     <NexusTable>
@@ -68,8 +74,7 @@ function OrderTable({
           <th>Pay</th>
           <th>Delivery</th>
           <th>Supplier</th>
-          {showDeliver && <th>Action</th>}
-          {showDelete && <th>Action</th>}
+          {showActions && <th>Action</th>}
         </tr>
       </thead>
       <tbody>
@@ -98,20 +103,25 @@ function OrderTable({
               {o.supplier || '—'}
               <p className="text-white/40">{o.supplier_status || '—'}</p>
             </td>
-            {showDeliver && (
+            {showActions && (
               <td>
-                {o.payment_status === 'paid' && o.delivery_status !== 'delivered' && (
-                  <NexusBtn variant="gold" className="text-xs" onClick={() => onFulfill(o.id)}>
-                    Deliver
-                  </NexusBtn>
-                )}
-              </td>
-            )}
-            {showDelete && onDelete && (
-              <td>
-                <NexusBtn variant="danger" className="!px-2 !py-1 text-xs" onClick={() => onDelete(o.id)}>
-                  Delete
-                </NexusBtn>
+                <div className="flex flex-wrap gap-1.5">
+                  {showApprove && onApprove && o.payment_status !== 'paid' && (
+                    <NexusBtn variant="gold" className="!px-2 !py-1 text-xs" onClick={() => onApprove(o.id)}>
+                      Approve & dispatch
+                    </NexusBtn>
+                  )}
+                  {showDeliver && o.payment_status === 'paid' && o.delivery_status !== 'delivered' && (
+                    <NexusBtn variant="gold" className="text-xs" onClick={() => onFulfill(o.id)}>
+                      Deliver
+                    </NexusBtn>
+                  )}
+                  {showDelete && onDelete && (
+                    <NexusBtn variant="danger" className="!px-2 !py-1 text-xs" onClick={() => onDelete(o.id)}>
+                      Delete
+                    </NexusBtn>
+                  )}
+                </div>
               </td>
             )}
           </tr>
@@ -168,6 +178,16 @@ export default function AdminOrdersPage() {
   const fulfillOne = async (id: string) => {
     await adminFetch(`/api/admin/orders/${id}/fulfill`, { method: 'PATCH' });
     load();
+  };
+
+  const approveOne = async (id: string) => {
+    if (!confirm('Approve this order? It will be marked paid and sent to the supplier to fulfil.')) return;
+    try {
+      await adminFetch(`/api/admin/orders/${id}/approve`, { method: 'PATCH' });
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Could not approve order');
+    }
   };
 
   const deleteOne = async (id: string) => {
@@ -304,7 +324,8 @@ export default function AdminOrdersPage() {
                 )}
               </div>
               <p className="mb-3 text-xs text-white/45">
-                Checkout started but MoMo not completed — safe to ignore or clean up.
+                Checkout started but MoMo not confirmed. If a customer paid directly, hit
+                <span className="font-semibold text-white/70"> Approve &amp; dispatch</span> to mark it paid and send it to the supplier.
               </p>
               <OrderTable
                 orders={split.pending}
@@ -312,8 +333,10 @@ export default function AdminOrdersPage() {
                 onToggle={toggle}
                 onFulfill={fulfillOne}
                 onDelete={deleteOne}
+                onApprove={approveOne}
                 showDeliver={false}
                 showDelete
+                showApprove
               />
             </section>
 
@@ -338,8 +361,10 @@ export default function AdminOrdersPage() {
                   onToggle={toggle}
                   onFulfill={fulfillOne}
                   onDelete={deleteOne}
+                  onApprove={approveOne}
                   showDeliver={false}
                   showDelete
+                  showApprove
                 />
               </section>
             )}
@@ -351,8 +376,10 @@ export default function AdminOrdersPage() {
             onToggle={toggle}
             onFulfill={fulfillOne}
             onDelete={deleteOne}
+            onApprove={approveOne}
             showDeliver={false}
             showDelete
+            showApprove
           />
         ) : (
           <OrderTable orders={orders} selected={selected} onToggle={toggle} onFulfill={fulfillOne} />
