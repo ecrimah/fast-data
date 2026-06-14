@@ -9,6 +9,7 @@ type Body = {
   network?: string;
   sizeGb?: number;
   phone?: string;
+  payerPhone?: string;
   paymentMethod?: 'moolre' | 'wallet';
 };
 
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
   const network = String(body.network ?? '').trim();
   const sizeGb = Number(body.sizeGb);
   const phone = String(body.phone ?? '').trim();
+  const payerPhone = String(body.payerPhone ?? '').trim() || phone;
   const paymentMethod = body.paymentMethod === 'wallet' ? 'wallet' : 'moolre';
 
   if (!network || !sizeGb || sizeGb <= 0 || !phone) {
@@ -88,6 +90,7 @@ export async function POST(request: Request) {
     network,
     sizeGb,
     phone,
+    payerPhone,
     paymentMethod,
     user,
     baseUrl,
@@ -103,5 +106,8 @@ export async function POST(request: Request) {
     orderId: result.order?.id,
     paymentRef: result.paymentRef,
     paymentUrl: result.paymentUrl ?? null,
+    promptSent: result.promptSent ?? false,
+    paymentPhone: result.paymentPhone ?? null,
+    message: result.paymentMessage ?? null,
   });
 }
