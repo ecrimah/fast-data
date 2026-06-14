@@ -30,12 +30,6 @@ export type ChatOrderResult = {
   order?: ChatOrder;
   paymentUrl?: string;
   paymentRef?: string;
-  /** True when a Mobile Money approval prompt was pushed to the payer's phone. */
-  promptSent?: boolean;
-  /** Number the prompt was sent to. */
-  paymentPhone?: string;
-  /** Human-friendly status message (e.g. "prompt sent to your phone"). */
-  paymentMessage?: string;
 };
 
 function normalizeNetwork(raw: string): Network | null {
@@ -136,8 +130,6 @@ export async function createChatOrder(args: {
   paymentMethod: 'moolre' | 'wallet';
   user?: { id: string; email: string; wallet_balance: number } | null;
   baseUrl: string;
-  /** Mobile Money number to charge. Defaults to the beneficiary phone. */
-  payerPhone?: string;
 }): Promise<ChatOrderResult> {
   if (!hasSupabaseAdminConfig()) {
     return { ok: false, error: 'Ordering is unavailable. Please use the shop page.' };
@@ -239,11 +231,10 @@ export async function createChatOrder(args: {
     orderId: order.id,
     customerEmail: args.user?.email,
     baseUrl: args.baseUrl,
-    payerPhone: args.payerPhone,
   });
 
-  if (!payment.success) {
-    return { ok: false, error: payment.message || 'Order created but payment could not be started.' };
+  if (!payment.success || !payment.url) {
+    return { ok: false, error: payment.message || 'Order created but payment link failed.' };
   }
 
   return {
@@ -251,8 +242,5 @@ export async function createChatOrder(args: {
     order: order as ChatOrder,
     paymentUrl: payment.url,
     paymentRef: order.payment_ref,
-    promptSent: payment.promptSent,
-    paymentPhone: payment.payer,
-    paymentMessage: payment.message,
   };
 }

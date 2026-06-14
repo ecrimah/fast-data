@@ -24,8 +24,6 @@ export const Checkout: React.FC<CheckoutProps> = ({ user }) => {
   const [checkoutState, setCheckoutState] = useState<{ bundle: Bundle; network: Network } | null>(null);
   const [ready, setReady] = useState(false);
   const [phone, setPhone] = useState('');
-  const [differentPayer, setDifferentPayer] = useState(false);
-  const [payerPhone, setPayerPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'moolre' | 'wallet'>('moolre');
@@ -77,12 +75,6 @@ export const Checkout: React.FC<CheckoutProps> = ({ user }) => {
       return;
     }
 
-    const momoNumber = differentPayer && payerPhone ? payerPhone : phone;
-    if (paymentMethod === 'moolre' && (!momoNumber || momoNumber.length < 10)) {
-      setError('Enter a valid Mobile Money number to charge.');
-      return;
-    }
-
     setLoading(true);
     // Capture the lead (their number) the moment they commit to paying — even if they never finish.
     trackIntent({
@@ -113,7 +105,6 @@ export const Checkout: React.FC<CheckoutProps> = ({ user }) => {
           network,
           sizeGb: bundle.size,
           phone,
-          payerPhone: momoNumber,
           paymentMethod,
         }),
       });
@@ -124,17 +115,11 @@ export const Checkout: React.FC<CheckoutProps> = ({ user }) => {
       }
 
       if (paymentMethod === 'moolre') {
-        // Legacy hosted-page flow (kept as a fallback).
-        if (result.paymentUrl) {
-          window.location.href = result.paymentUrl;
-          return;
+        if (!result.paymentUrl) {
+          throw new Error('Could not start MoMo payment. Please try again.');
         }
-        // Direct USSD-prompt flow: prompt was pushed to the payer's phone.
-        if (result.promptSent && result.paymentRef) {
-          router.push(`/success?order=${encodeURIComponent(result.paymentRef)}&payment_success=true`);
-          return;
-        }
-        throw new Error(result.message || 'Could not start MoMo payment. Please try again.');
+        window.location.href = result.paymentUrl;
+        return;
       }
 
       router.push('/success');
@@ -185,36 +170,7 @@ export const Checkout: React.FC<CheckoutProps> = ({ user }) => {
                 placeholder="024 XXX XXXX"
               />
             </div>
-            <p className="mt-1 text-xs text-muted">The data bundle is delivered to this number.</p>
           </div>
-
-          {paymentMethod === 'moolre' && (
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-royal">
-                <input
-                  type="checkbox"
-                  checked={differentPayer}
-                  onChange={(e) => setDifferentPayer(e.target.checked)}
-                />
-                I&apos;m paying from a different Mobile Money number
-              </label>
-              {differentPayer && (
-                <div className="relative mt-2">
-                  <Smartphone className="absolute left-3 top-3 text-muted" size={18} />
-                  <input
-                    type="tel"
-                    value={payerPhone}
-                    onChange={(e) => setPayerPhone(e.target.value)}
-                    className="w-full rounded-xl border border-border py-3 pl-10 pr-3 outline-none focus:ring-2 focus:ring-gold/40"
-                    placeholder="MoMo number to charge"
-                  />
-                </div>
-              )}
-              <p className="mt-1 text-xs text-muted">
-                The Mobile Money approval prompt is sent to {differentPayer ? 'the number above' : 'the beneficiary number'}.
-              </p>
-            </div>
-          )}
 
           <div className="grid grid-cols-2 gap-3">
             <button
