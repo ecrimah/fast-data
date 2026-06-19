@@ -44,9 +44,11 @@ function OrderTable({
   onFulfill,
   onDelete,
   onApprove,
+  onRetry,
   showDeliver = true,
   showDelete = false,
   showApprove = false,
+  showRetry = false,
 }: {
   orders: Order[];
   selected: Set<string>;
@@ -54,15 +56,17 @@ function OrderTable({
   onFulfill: (id: string) => void;
   onDelete?: (id: string) => void;
   onApprove?: (id: string) => void;
+  onRetry?: (id: string) => void;
   showDeliver?: boolean;
   showDelete?: boolean;
   showApprove?: boolean;
+  showRetry?: boolean;
 }) {
   if (!orders.length) {
     return <EmptyNexus title="Nothing here" description="No orders in this section." />;
   }
 
-  const showActions = showDeliver || showDelete || showApprove;
+  const showActions = showDeliver || showDelete || showApprove || showRetry;
 
   return (
     <NexusTable>
@@ -109,6 +113,11 @@ function OrderTable({
                   {showApprove && onApprove && o.payment_status !== 'paid' && (
                     <NexusBtn variant="gold" className="!px-2 !py-1 text-xs" onClick={() => onApprove(o.id)}>
                       Approve & dispatch
+                    </NexusBtn>
+                  )}
+                  {showRetry && onRetry && o.payment_status === 'paid' && o.delivery_status !== 'delivered' && (
+                    <NexusBtn variant="ghost" className="!px-2 !py-1 text-xs" onClick={() => onRetry(o.id)}>
+                      Retry supplier
                     </NexusBtn>
                   )}
                   {showDeliver && o.payment_status === 'paid' && o.delivery_status !== 'delivered' && (
@@ -187,6 +196,19 @@ export default function AdminOrdersPage() {
       load();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Could not approve order');
+    }
+  };
+
+  const retryOne = async (id: string) => {
+    if (!confirm('Re-send this paid order to the supplier?')) return;
+    try {
+      const res = await adminFetch(`/api/admin/orders/${id}/redispatch`, { method: 'PATCH' });
+      if (res && res.ok === false) {
+        alert(`Supplier rejected it again: ${res.supplierError || res.supplierStatus || 'unknown error'}`);
+      }
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Could not re-send to supplier');
     }
   };
 
@@ -345,8 +367,18 @@ export default function AdminOrdersPage() {
                 <h3 className="font-bold text-white">Paid orders</h3>
                 <NexusPill tone={split.paid.length ? 'success' : 'neutral'}>{split.paid.length}</NexusPill>
               </div>
-              <p className="mb-3 text-xs text-white/45">Confirmed payments — deliver, track supplier, or export.</p>
-              <OrderTable orders={split.paid} selected={selected} onToggle={toggle} onFulfill={fulfillOne} />
+              <p className="mb-3 text-xs text-white/45">
+                Confirmed payments — deliver, track supplier, or export. If the supplier failed, hit
+                <span className="font-semibold text-white/70"> Retry supplier</span> to re-send it.
+              </p>
+              <OrderTable
+                orders={split.paid}
+                selected={selected}
+                onToggle={toggle}
+                onFulfill={fulfillOne}
+                onRetry={retryOne}
+                showRetry
+              />
             </section>
 
             {split.failed.length > 0 && (
@@ -382,7 +414,14 @@ export default function AdminOrdersPage() {
             showApprove
           />
         ) : (
-          <OrderTable orders={orders} selected={selected} onToggle={toggle} onFulfill={fulfillOne} />
+          <OrderTable
+            orders={orders}
+            selected={selected}
+            onToggle={toggle}
+            onFulfill={fulfillOne}
+            onRetry={retryOne}
+            showRetry
+          />
         )}
       </GlassPanel>
     </NexusPage>
