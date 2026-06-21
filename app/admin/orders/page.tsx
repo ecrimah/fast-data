@@ -26,7 +26,24 @@ type Order = {
   delivery_status: string;
   supplier?: string | null;
   supplier_status?: string | null;
+  supplier_reference?: string | null;
 };
+
+function needsSupplierRetry(o: Order) {
+  if (o.payment_status !== 'paid') return false;
+  if (o.supplier_status === 'failed' || o.supplier_status === 'awaiting_manual') return true;
+  if (!o.supplier_reference && o.supplier_status === 'fulfilled') return true;
+  if (o.delivery_status === 'delivered' && !o.supplier_reference) return true;
+  return false;
+}
+
+function canMarkDelivered(o: Order) {
+  if (o.payment_status !== 'paid' || o.delivery_status === 'delivered') return false;
+  if (o.supplier_status === 'fulfilled') return true;
+  return Boolean(
+    o.supplier_reference && (o.supplier_status === 'processing' || o.supplier_status === 'pending')
+  );
+}
 
 const FILTERS = [
   { id: 'all', label: 'All' },
@@ -115,12 +132,12 @@ function OrderTable({
                       Approve & dispatch
                     </NexusBtn>
                   )}
-                  {showRetry && onRetry && o.payment_status === 'paid' && o.delivery_status !== 'delivered' && (
+                  {showRetry && onRetry && needsSupplierRetry(o) && (
                     <NexusBtn variant="ghost" className="!px-2 !py-1 text-xs" onClick={() => onRetry(o.id)}>
                       Retry supplier
                     </NexusBtn>
                   )}
-                  {showDeliver && o.payment_status === 'paid' && o.delivery_status !== 'delivered' && (
+                  {showDeliver && canMarkDelivered(o) && (
                     <NexusBtn variant="gold" className="text-xs" onClick={() => onFulfill(o.id)}>
                       Deliver
                     </NexusBtn>

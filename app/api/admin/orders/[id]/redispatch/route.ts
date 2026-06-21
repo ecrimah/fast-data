@@ -17,7 +17,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const { data: order } = await service
     .from('orders')
-    .select('id, payment_status, delivery_status, payment_ref')
+    .select('id, payment_status, delivery_status, payment_ref, supplier_status, supplier_reference, supplier_order_code')
     .eq('id', id)
     .maybeSingle();
 
@@ -25,18 +25,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (order.payment_status !== 'paid') {
     return NextResponse.json({ error: 'Only paid orders can be sent to the supplier.' }, { status: 400 });
   }
-  if (order.delivery_status === 'delivered') {
-    return NextResponse.json({ error: 'Order already delivered.' }, { status: 400 });
+
+  // Block only when the supplier actually confirmed fulfilment (has a reference/code).
+  const supplierConfirmed =
+    order.delivery_status === 'delivered' &&
+    order.supplier_status === 'fulfilled' &&
+    Boolean(order.supplier_reference || order.supplier_order_code);
+
+  if (supplierConfirmed) {
+    return NextResponse.json({ error: 'Order already delivered by the supplier.' }, { status: 400 });
   }
 
-  // Reset the previous (failed) supplier attempt so dispatchOrderToSupplier runs again.
+  // Reset the previous (failed or wrongly marked) supplier attempt so dispatch runs again.
   await service
     .from('orders')
     .update({
+      delivery_status: 'pending',
       supplier_reference: null,
       supplier_order_code: null,
       supplier_status: null,
       supplier_error: null,
+      supplier_fulfilled_at: null,
     })
     .eq('id', id);
 

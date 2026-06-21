@@ -13,9 +13,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const service = createServiceClient();
   const { data: order } = await service
     .from('orders')
-    .select('phone, bundle_size, payment_ref')
+    .select('phone, bundle_size, payment_ref, supplier_status, supplier_reference')
     .eq('id', id)
     .maybeSingle();
+
+  if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+
+  if (order.supplier_status === 'failed' || (!order.supplier_reference && order.supplier_status !== 'fulfilled')) {
+    return NextResponse.json(
+      { error: 'Supplier has not fulfilled this order yet — use Retry supplier first.' },
+      { status: 400 }
+    );
+  }
 
   await service
     .from('orders')
